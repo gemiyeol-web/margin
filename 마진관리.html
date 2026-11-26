@@ -1,0 +1,2742 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>잘넷(ZALNET) 쿠팡 원가 및 마진 분석기 V3</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (xlsx) for Excel Export with Formulas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Pretendard Font -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <style>
+        body {
+            font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        /* VAT 별도 토글 제어 스타일 */
+        body.hide-vat-sub .vat-sub-info {
+            display: none !important;
+        }
+        /* 테이블 Sticky 컬럼 그림자 효과 */
+        .sticky-col-shadow {
+            box-shadow: 4px 0 8px -4px rgba(15, 23, 42, 0.08);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Top Navigation Bar (안 A: 다크 네이비 헤더 + Pill 버튼형 탭) -->
+    <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
+        <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="h-16 flex items-center justify-between gap-2">
+                <!-- Brand Title -->
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-sm ring-1 ring-blue-400/30">
+                        <i class="fa-solid fa-calculator"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-base sm:text-xl font-extrabold text-white tracking-tight">잘넷 쿠팡 원가 & 마진 분석기</h1>
+                            <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">V3 ZALNET</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Utility Buttons -->
+                <div class="flex items-center space-x-2">
+                    <button onclick="openCategoryModal()" class="px-3 py-2 text-xs sm:text-sm font-bold text-indigo-200 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/70 rounded-xl transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-palette text-indigo-400"></i>
+                        <span>카테고리 & 색상 관리</span>
+                    </button>
+                    <button onclick="exportJSON()" class="px-3 py-2 text-xs sm:text-sm font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition flex items-center gap-1.5" title="전체 데이터 JSON 백업">
+                        <i class="fa-solid fa-download text-slate-400"></i>
+                        <span class="hidden md:inline">백업</span>
+                    </button>
+                    <label class="px-3 py-2 text-xs sm:text-sm font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition flex items-center gap-1.5 cursor-pointer" title="JSON 백업 파일 불러오기">
+                        <i class="fa-solid fa-upload text-slate-400"></i>
+                        <span class="hidden md:inline">불러오기</span>
+                        <input type="file" id="importFileInput" accept=".json" class="hidden" onchange="importJSON(event)">
+                    </label>
+                    <button onclick="resetSampleData()" class="px-2.5 py-2 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition" title="초기 샘플 데이터 복원">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main Navigation Pill Tabs -->
+            <div class="flex items-center space-x-2 border-t border-slate-800/80 py-2.5">
+                <button id="mainTabBtn_sim" onclick="switchMainTab('sim')" class="px-5 py-2.5 rounded-xl text-sm font-extrabold bg-blue-600 text-white shadow-sm flex items-center gap-2 transition">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>1. 쿠팡 마진 시뮬레이터</span>
+                </button>
+                <button id="mainTabBtn_list" onclick="switchMainTab('list')" class="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-300 hover:text-white hover:bg-slate-800 flex items-center gap-2 transition">
+                    <i class="fa-solid fa-table-list"></i>
+                    <span>2. 등록된 제품 리스트</span>
+                    <span id="navProductCountBadge" class="px-2 py-0.5 text-xs rounded-full bg-slate-700 text-slate-200 font-extrabold">0</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- =================================================================== -->
+        <!-- TAB 1: 쿠팡 마진 시뮬레이터 -->
+        <!-- =================================================================== -->
+        <section id="tabSection_sim" class="space-y-6">
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-base sm:text-lg font-extrabold text-slate-900">쿠팡 마진 시뮬레이터</h2>
+                            <span id="draftStatusIndicator" class="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 flex items-center gap-1">
+                                <i class="fa-solid fa-cloud-arrow-up text-[10px] text-blue-500"></i> 자동 임시보관 작동중
+                            </span>
+                        </div>
+                        <p id="sim_modeDescText" class="text-xs text-slate-500 mt-0.5">🔄 <strong>역산 모드:</strong> 쿠팡 판매가를 기준으로 마진율을 차감하여 납품가와 매입원가를 역산합니다.</p>
+                    </div>
+
+                    <!-- 역산 / 정산 원클릭 단일 토글 버튼 -->
+                    <button type="button" id="simModeToggleBtn" onclick="toggleSimCalcMode()" class="px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm self-start lg:self-auto shrink-0 cursor-pointer">
+                        <i id="simModeToggleIcon" class="fa-solid fa-arrow-rotate-left"></i>
+                        <span id="simModeToggleText">역산</span>
+                    </button>
+                </div>
+
+                <!-- Product Basic Info Input -->
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 mb-6">
+                    <div class="sm:col-span-3">
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">카테고리</label>
+                        <select id="sim_category" onchange="saveSimDraft()" class="category-select-dropdown w-full px-3 py-2.5 text-sm font-semibold border border-slate-300 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500"></select>
+                    </div>
+                    <div class="sm:col-span-6">
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">제품명 <span class="text-red-500">*</span></label>
+                        <input type="text" id="sim_name" value="에어프라이어 종이호일" oninput="saveSimDraft()" class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="sm:col-span-3">
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">개발 검토일</label>
+                        <div class="relative">
+                            <input type="text" id="sim_reviewDate" placeholder="YYYY-MM-DD" onfocus="this.type='date'" onblur="if(!this.value) this.type='text'" onchange="saveSimDraft()" class="w-full px-3 py-2.5 text-sm font-bold text-slate-800 border border-slate-300 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 입수량, 사이즈, 단위, 구성 -->
+                <div class="grid grid-cols-2 sm:grid-cols-12 gap-3 bg-blue-50/50 p-4 rounded-xl border border-blue-100 mb-6">
+                    <div class="col-span-1 sm:col-span-2">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">입수량 (개)</label>
+                        <input type="number" id="sim_qty" min="1" step="1" value="1" oninput="calculateSim('salePrice')" class="w-full px-3 py-2 text-sm font-extrabold text-right bg-white border border-slate-300 rounded-lg outline-none">
+                    </div>
+                    <div class="col-span-1 sm:col-span-3">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">사이즈/용량 수치</label>
+                        <input type="number" id="sim_sizeVal" step="any" placeholder="예: 500" oninput="calculateSim('salePrice')" class="w-full px-3 py-2 text-sm font-bold text-right bg-white border border-slate-300 rounded-lg outline-none">
+                    </div>
+                    <div class="col-span-1 sm:col-span-2 relative z-40">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">단위</label>
+                        <div class="relative">
+                            <input type="text" id="sim_sizeUnit" value="ml" readonly onclick="event.stopPropagation(); toggleUnitPicker('sim_unitPickerDropdown')" class="w-full px-2 py-2 text-sm font-bold text-center bg-white border border-slate-300 rounded-lg outline-none cursor-pointer hover:border-blue-500 transition">
+                            <span class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"><i class="fa-solid fa-chevron-down"></i></span>
+                        </div>
+                        <!-- Unit Picker Popup List -->
+                        <div id="sim_unitPickerDropdown" class="unit-picker-dropdown absolute left-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-2xl z-[9999] hidden p-2 grid grid-cols-3 gap-1">
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('sim', 'ml')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">ml</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('sim', 'g')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">g</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('sim', 'L')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">L</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('sim', 'kg')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">kg</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('sim', 'oz')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">oz</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('sim', 'cm')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">cm</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('sim', 'mm')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">mm</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('sim', '매')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">매</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('sim', '개')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">개</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('sim', '포')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">포</button>
+                        </div>
+                    </div>
+                    <div class="col-span-3 sm:col-span-5">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">상세 구성 설명</label>
+                        <input type="text" id="sim_composition" value="50매 X 2입" oninput="saveSimDraft()" placeholder="예: 50매 X 2입" class="w-full px-3.5 py-2 text-sm bg-white border border-slate-300 rounded-lg outline-none">
+                    </div>
+                </div>
+
+                <!-- 6-Step Flow Visual Group Header (UX 개선 1: 단계별 그룹핑 및 화살표 연결) -->
+                <div class="hidden lg:grid lg:grid-cols-6 gap-3 mb-2 px-1">
+                    <div class="col-span-2 flex items-center justify-between bg-blue-100/80 text-blue-900 px-3 py-1.5 rounded-lg text-[11px] font-extrabold border border-blue-200">
+                        <span><i class="fa-solid fa-building mr-1"></i> STEP 1. 잘넷(자사) 원가 및 마진 구간</span>
+                        <i class="fa-solid fa-angles-right text-blue-500"></i>
+                    </div>
+                    <div class="col-span-3 flex items-center justify-between bg-amber-100/80 text-amber-900 px-3 py-1.5 rounded-lg text-[11px] font-extrabold border border-amber-200">
+                        <span><i class="fa-solid fa-truck-fast mr-1"></i> STEP 2. 쿠팡 로켓 납품 및 마진 · 판매가 구간</span>
+                        <i class="fa-solid fa-angles-right text-amber-600"></i>
+                    </div>
+                    <div class="col-span-1 flex items-center justify-center bg-indigo-100/80 text-indigo-900 px-3 py-1.5 rounded-lg text-[11px] font-extrabold border border-indigo-200">
+                        <span><i class="fa-solid fa-tags mr-1"></i> STEP 3. 소비자 체감 단가</span>
+                    </div>
+                </div>
+
+                <!-- 6-Step Price & Margin Cards with Flow Arrows -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 mb-6 relative">
+                    <!-- 1. 잘넷 매입가 -->
+                    <div id="simCard_cost" class="bg-blue-50/70 border border-blue-200 rounded-2xl p-4 space-y-2 relative transition-all">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-extrabold text-blue-950">① 잘넷 매입가</span>
+                            <span id="simBadge_costBase" class="hidden px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-600 text-white shadow-2xs">기준원가</span>
+                        </div>
+                        <div>
+                            <div class="relative">
+                                <input type="text" id="sim_ourPurchaseCost" oninput="handleCurrencyInput(this); calculateSim('ourCost');" class="w-full px-3 py-2 text-base font-extrabold text-right text-blue-950 bg-white border border-blue-300 rounded-xl outline-none pr-8">
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-700">원</span>
+                            </div>
+                            <div id="sim_vatSub_cost" class="text-[11px] text-slate-600 text-right mt-1">VAT 별도: 0원</div>
+                        </div>
+                        <div class="hidden lg:flex absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-blue-600 text-white items-center justify-center text-[10px] z-10 shadow-xs pointer-events-none">
+                            <i id="simFlowIcon_1" class="fa-solid fa-arrow-left"></i>
+                        </div>
+                    </div>
+
+                    <!-- 2. 잘넷 마진율 -->
+                    <div class="bg-blue-50/70 border border-blue-200 rounded-2xl p-4 space-y-2 relative">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-extrabold text-blue-950">② 잘넷 마진율</span>
+                        </div>
+                        <div>
+                            <div class="relative">
+                                <input type="number" step="0.1" id="sim_ourMarginRate" value="25" oninput="calculateSim('ourMarginRate')" class="w-full px-3 py-2 text-base font-extrabold text-right text-blue-900 bg-white border border-blue-300 rounded-xl outline-none pr-7">
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-700">%</span>
+                            </div>
+                            <div id="sim_res_ourMarginInc" class="text-xs font-bold text-slate-800 text-right mt-1">0원</div>
+                            <div id="sim_res_ourMarginExc" class="text-[10px] text-slate-500 text-right">VAT 별도: 0원</div>
+                        </div>
+                        <div class="hidden lg:flex absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-800 text-white items-center justify-center text-[10px] z-10 shadow-xs pointer-events-none">
+                            <i id="simFlowIcon_2" class="fa-solid fa-arrow-left"></i>
+                        </div>
+                    </div>
+
+                    <!-- 3. 쿠팡 납품가 -->
+                    <div class="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 space-y-2 relative">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-extrabold text-amber-950">③ 쿠팡 납품가</span>
+                        </div>
+                        <div>
+                            <div class="relative">
+                                <input type="text" id="sim_coupangSupplyPrice" oninput="handleCurrencyInput(this); calculateSim('supplyPrice');" class="w-full px-3 py-2 text-base font-extrabold text-right text-amber-950 bg-white border border-amber-300 rounded-xl outline-none pr-8">
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-700">원</span>
+                            </div>
+                            <div id="sim_vatSub_supply" class="text-[11px] text-slate-600 text-right mt-1">VAT 별도: 0원</div>
+                        </div>
+                        <div class="hidden lg:flex absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-amber-600 text-white items-center justify-center text-[10px] z-10 shadow-xs pointer-events-none">
+                            <i id="simFlowIcon_3" class="fa-solid fa-arrow-left"></i>
+                        </div>
+                    </div>
+
+                    <!-- 4. 쿠팡 마진율 -->
+                    <div class="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 space-y-2 relative">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-extrabold text-amber-950">④ 쿠팡 마진율</span>
+                        </div>
+                        <div>
+                            <div class="relative">
+                                <input type="number" step="0.1" id="sim_coupangMarginRate" value="40" oninput="calculateSim('coupangMarginRate')" class="w-full px-3 py-2 text-base font-extrabold text-right text-amber-900 bg-white border border-amber-300 rounded-xl outline-none pr-7">
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-700">%</span>
+                            </div>
+                            <div id="sim_res_coupangMarginInc" class="text-xs font-bold text-slate-800 text-right mt-1">0원</div>
+                            <div id="sim_res_coupangMarginExc" class="text-[10px] text-slate-500 text-right">VAT 별도: 0원</div>
+                        </div>
+                        <div class="hidden lg:flex absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-amber-700 text-white items-center justify-center text-[10px] z-10 shadow-xs pointer-events-none">
+                            <i id="simFlowIcon_4" class="fa-solid fa-arrow-left"></i>
+                        </div>
+                    </div>
+
+                    <!-- 5. 쿠팡 판매가 -->
+                    <div id="simCard_sale" class="bg-amber-100/70 border-2 border-amber-400 rounded-2xl p-4 space-y-2 relative transition-all shadow-xs">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-extrabold text-amber-950">⑤ 쿠팡 판매가</span>
+                            <span id="simBadge_saleBase" class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white shadow-2xs">기준가격</span>
+                        </div>
+                        <div>
+                            <div class="relative">
+                                <input type="text" id="sim_coupangSalePrice" value="10,000" oninput="handleCurrencyInput(this); calculateSim('salePrice');" class="w-full px-3 py-2 text-base font-extrabold text-right text-amber-950 bg-white border border-amber-400 rounded-xl outline-none pr-8">
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-800">원</span>
+                            </div>
+                            <div id="sim_vatSub_sale" class="text-[11px] text-slate-700 text-right mt-1">VAT 별도: 9,091원</div>
+                        </div>
+                        <div class="hidden lg:flex absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-indigo-600 text-white items-center justify-center text-[10px] z-10 shadow-xs pointer-events-none">
+                            <i class="fa-solid fa-divide"></i>
+                        </div>
+                    </div>
+
+                    <!-- 6. 개당 판매가 -->
+                    <div class="bg-indigo-50/80 border border-indigo-200 rounded-2xl p-4 space-y-2 flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-extrabold text-indigo-950">⑥ 개당 판매가</span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-200 text-indigo-800">단위비교</span>
+                        </div>
+                        <div>
+                            <div id="sim_res_perItemPrice" class="text-base font-extrabold text-indigo-950 text-right">10,000원</div>
+                            <div id="sim_res_perItemExc" class="text-[11px] text-slate-600 text-right mt-1">VAT 별도: 9,091원</div>
+                            <div id="sim_res_perSizeBadge" class="text-[10px] font-bold text-indigo-700 text-right mt-0.5">입수량 1개</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Reference Vendors (Competitors) Comparison Section (2-Column Compact Grid Applied) -->
+                <div class="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 mb-6 space-y-3">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-extrabold">
+                                <i class="fa-solid fa-store"></i>
+                            </span>
+                            <div>
+                                <h3 class="text-xs sm:text-sm font-extrabold text-slate-800">참고 업체 비교 등록</h3>
+                                <p class="text-[11px] text-slate-500">유사 경쟁사 상품의 판매가와 규격을 컴팩트 2단 카드로 편리하게 입력하여 개당 단가를 비교합니다.</p>
+                            </div>
+                        </div>
+                        <button type="button" onclick="addCompetitorRow('sim_compListContainer', null, 'sim', true)" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 shadow-xs">
+                            <i class="fa-solid fa-plus"></i> 참고업체 추가
+                        </button>
+                    </div>
+                    <!-- 2단 그리드 배치로 가로 길이를 절반으로 줄여 시선 이동 최소화 -->
+                    <div id="sim_compListContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start"></div>
+                </div>
+
+                <!-- Special Notes / Memo -->
+                <div class="space-y-1.5 mb-6">
+                    <label class="block text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
+                        <i class="fa-regular fa-note-sticky text-blue-600"></i> 특이사항 및 이력 메모 (KC인증 / 포장사양 / 공장담당자 / 샘플검수 등)
+                    </label>
+                    <textarea id="sim_memo" rows="2" oninput="saveSimDraft()" placeholder="KC인증번호, 마스터박스 입수량, 담당자 연락처, 검수 특이사항 등을 자유롭게 기록하세요." class="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-y"></textarea>
+                </div>
+
+                <!-- Bottom Save Button -->
+                <div class="flex items-center justify-between pt-4 border-t border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <span id="sim_profitStatusBadge" class="text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-800 border border-emerald-500/30">양호한 마진 구간</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="resetSimForm(true)" class="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition">입력 초기화</button>
+                        <button onclick="saveNewProductFromSim()" class="px-6 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold bg-blue-600 hover:bg-blue-700 text-white shadow-md transition flex items-center gap-2">
+                            <i class="fa-solid fa-bookmark"></i> 제품 리스트에 등록하기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- =================================================================== -->
+        <!-- TAB 2: 등록된 제품 리스트 -->
+        <!-- =================================================================== -->
+        <section id="tabSection_list" class="space-y-5 hidden">
+            <!-- Filter & Toolbar Header -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-5 flex flex-col gap-4">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <!-- Search & VAT Toggle -->
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+                        <div class="relative flex-1 max-w-md">
+                            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                            </span>
+                            <input type="text" id="listSearchInput" oninput="renderProductList()" placeholder="제품명, 상세구성, 메모 검색..." class="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <label class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 cursor-pointer select-none">
+                            <input type="checkbox" checked onchange="toggleVatSubDisplay(this.checked)" class="w-4 h-4 rounded accent-blue-600 cursor-pointer">
+                            <span class="text-xs font-bold text-slate-700">VAT 별도 금액 함께 보기</span>
+                        </label>
+                    </div>
+
+                    <!-- Batch Actions -->
+                    <div class="flex items-center gap-2 shrink-0">
+                        <span id="selectedCountLabel" class="text-xs font-extrabold text-slate-600 px-2">선택: 0건</span>
+                        <button onclick="exportSelectedToExcelWithFormulas()" class="px-3.5 py-2.5 text-xs sm:text-sm font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition flex items-center gap-1.5 shadow-2xs">
+                            <i class="fa-solid fa-file-excel"></i>
+                            <span>엑셀↓</span>
+                        </button>
+                        <button onclick="deleteSelectedProducts()" class="px-3.5 py-2.5 text-xs sm:text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-trash-can"></i>
+                            <span>선택삭제</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Category Filter Pills -->
+                <div id="categoryFilterPills" class="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100"></div>
+            </div>
+
+            <!-- Products Table Container -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse whitespace-nowrap min-w-[1400px]">
+                        <thead>
+                            <tr class="bg-slate-900 text-white border-b border-slate-800 text-xs font-extrabold select-none">
+                                <th class="py-3.5 px-3 text-center w-10 sticky left-0 z-20 bg-slate-900">
+                                    <input type="checkbox" onchange="toggleSelectAll(this)" class="w-4 h-4 rounded accent-blue-500 cursor-pointer" title="전체 선택/해제">
+                                </th>
+                                <th class="py-3.5 px-3 cursor-pointer hover:bg-slate-800 transition" onclick="sortProductList('category')">
+                                    카테고리 <i data-col="category" class="fa-solid fa-sort text-[10px] sort-icon ml-1 text-slate-400"></i>
+                                </th>
+                                <th class="py-3.5 px-3 cursor-pointer hover:bg-slate-800 transition" onclick="sortProductList('reviewDate')">
+                                    개발일 <i data-col="reviewDate" class="fa-solid fa-sort text-[10px] sort-icon ml-1 text-slate-400"></i>
+                                </th>
+                                <th class="py-3.5 px-3 cursor-pointer hover:bg-slate-800 transition sticky left-10 z-20 bg-slate-900 sticky-col-shadow" onclick="sortProductList('name')">
+                                    제품명 및 스펙 <i data-col="name" class="fa-solid fa-sort text-[10px] sort-icon ml-1 text-slate-400"></i>
+                                </th>
+                                <th class="py-3.5 px-3 text-center cursor-pointer hover:bg-slate-800 transition" onclick="sortProductList('competitiveness')">
+                                    가격 경쟁력 <i data-col="competitiveness" class="fa-solid fa-sort text-[10px] sort-icon ml-1 text-slate-400"></i>
+                                </th>
+                                <th class="py-3.5 px-3 text-right bg-slate-800/90 border-l border-slate-700 cursor-pointer hover:bg-slate-700 transition" onclick="sortProductList('ourPurchaseCost')">
+                                    ① 잘넷 매입가 <i data-col="ourPurchaseCost" class="fa-solid fa-sort text-[10px] sort-icon ml-1 text-slate-400"></i>
+                                </th>
+                                <th class="py-3.5 px-3 text-right bg-slate-800/90 border-r border-slate-700 cursor-pointer hover:bg-slate-700 transition" onclick="sortProductList('ourMarginRate')">
+                                    ② 잘넷 마진 <i data-col="ourMarginRate" class="fa-solid fa-sort text-[10px] sort-icon ml-1 text-slate-400"></i>
+                                </th>
+                                <th class="py-3.5 px-3 text-right cursor-pointer hover:bg-slate-800 transition" onclick="sortProductList('coupangSupplyPrice')">
+                                    ③ 쿠팡 납품가 <i data-col="coupangSupplyPrice" class="fa-solid fa-sort text-[10px] sort-icon ml-1 text-slate-400"></i>
+                                </th>
+                                <th class="py-3.5 px-3 text-right cursor-pointer hover:bg-slate-800 transition" onclick="sortProductList('coupangMarginRate')">
+                                    ④ 쿠팡 마진 <i data-col="coupangMarginRate" class="fa-solid fa-sort text-[10px] sort-icon ml-1 text-slate-400"></i>
+                                </th>
+                                <th class="py-3.5 px-3 text-right border-r border-slate-700 cursor-pointer hover:bg-slate-800 transition text-amber-300" onclick="sortProductList('coupangSalePrice')">
+                                    ⑤ 쿠팡 판매가 <i data-col="coupangSalePrice" class="fa-solid fa-sort text-[10px] sort-icon ml-1 text-slate-400"></i>
+                                </th>
+                                <th class="py-3.5 px-3 text-right cursor-pointer hover:bg-slate-800 transition text-indigo-300" onclick="sortProductList('unitPrice')">
+                                    ⑥ 개당 판매가 <i data-col="unitPrice" class="fa-solid fa-sort text-[10px] sort-icon ml-1 text-slate-400"></i>
+                                </th>
+                                <th class="py-3.5 px-3 text-center cursor-pointer hover:bg-slate-800 transition" onclick="sortProductList('compCount')">
+                                    참고업체 <i data-col="compCount" class="fa-solid fa-sort text-[10px] sort-icon ml-1 text-slate-400"></i>
+                                </th>
+                                <th class="py-3.5 px-3 text-center">관리</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productTableBody" class="divide-y divide-slate-200 text-xs"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- =================================================================== -->
+    <!-- MODAL 0: 제품 상세 정보 크게 보기 팝업 -->
+    <!-- =================================================================== -->
+    <div id="productDetailModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-6 overflow-y-auto">
+        <div class="bg-white rounded-2xl w-[96vw] max-w-[1600px] shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col">
+            <!-- Header -->
+            <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between gap-4 shrink-0">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div id="detail_categoryBadge"></div>
+                    <h3 id="detail_productName" class="text-lg sm:text-xl font-extrabold text-white truncate">제품명</h3>
+                    <div id="detail_compBadge"></div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button onclick="resetDetailModalToSaved()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-rotate-left"></i> 초기화
+                    </button>
+                    <button id="detail_saveBtn" onclick="saveDetailModalSimChanges()" class="px-4 py-2 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 hidden">
+                        <i class="fa-solid fa-check"></i> 변경사항 저장
+                    </button>
+                    <button id="detail_editBtn" class="px-4 py-2 rounded-xl text-xs font-extrabold bg-blue-600 hover:bg-blue-500 text-white transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-pen-to-square"></i> 전체수정
+                    </button>
+                    <button onclick="closeProductDetailModal()" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition">
+                        <i class="fa-solid fa-xmark text-base"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Body -->
+            <div class="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50">
+                <input type="hidden" id="detail_activeProdId">
+
+                <!-- 1-Row Core Data Table -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+                    <div class="px-4 py-2.5 bg-slate-800 text-white flex items-center justify-between">
+                        <span class="text-xs font-extrabold flex items-center gap-1.5">
+                            <i class="fa-solid fa-table-columns text-blue-400"></i> ZALNET 제품 원가·마진 1줄 한눈에 보기 (VAT 포함 / 별도 병기)
+                        </span>
+                        <span id="detail_specText" class="text-xs font-bold text-slate-300">입수량 1개</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse whitespace-nowrap min-w-[1000px]">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-700 border-b border-slate-200 text-[11px] font-extrabold">
+                                    <th class="py-2.5 px-3.5">제품명</th>
+                                    <th class="py-2.5 px-3.5">입수량 · 사이즈 · 구성</th>
+                                    <th class="py-2.5 px-3.5 text-right bg-blue-50/70 text-blue-950 border-l border-slate-200">① 잘넷 매입가</th>
+                                    <th class="py-2.5 px-3.5 text-right bg-blue-50/70 text-blue-950 border-r border-slate-200">② 잘넷 마진</th>
+                                    <th class="py-2.5 px-3.5 text-right bg-amber-50/70 text-amber-950">③ 쿠팡 납품가</th>
+                                    <th class="py-2.5 px-3.5 text-right bg-amber-50/70 text-amber-950">④ 쿠팡 마진</th>
+                                    <th class="py-2.5 px-3.5 text-right bg-amber-100/60 text-amber-950 border-r border-slate-200">⑤ 쿠팡 판매가</th>
+                                    <th class="py-2.5 px-3.5 text-right bg-indigo-50/70 text-indigo-950">⑥ 개당 판매가</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detail_oneRowTableBody" class="text-xs bg-white"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 6-Step Distribution Flow Cards -->
+                <div class="overflow-x-auto pb-1">
+                    <div class="grid grid-cols-6 gap-3 min-w-[1080px] whitespace-nowrap">
+                        <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-3.5 space-y-1">
+                            <div class="text-[11px] font-extrabold text-blue-800">① 잘넷 매입가 (VAT포함)</div>
+                            <div class="relative">
+                                <input type="text" id="detail_input_ourCost" oninput="handleCurrencyInput(this); calculateDetailModalSim('ourCost');" class="w-full pl-2.5 pr-7 py-1.5 text-sm font-extrabold text-right text-slate-900 bg-white border border-blue-300 rounded-lg outline-none">
+                                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-700">원</span>
+                            </div>
+                            <div id="detail_costExc" class="text-[11px] text-slate-600">별도 0원</div>
+                            <div id="detail_costVat" class="text-[10px] text-slate-400">세액 0원</div>
+                        </div>
+                        <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-3.5 space-y-1">
+                            <div class="text-[11px] font-extrabold text-blue-800">② 잘넷 마진율 (%)</div>
+                            <div class="relative">
+                                <input type="number" step="0.1" id="detail_input_ourMarginRate" oninput="calculateDetailModalSim('ourMarginRate')" class="w-full pl-2.5 pr-6 py-1.5 text-sm font-extrabold text-right text-blue-700 bg-white border border-blue-300 rounded-lg outline-none">
+                                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-700">%</span>
+                            </div>
+                            <div id="detail_ourMarginInc" class="text-xs font-bold text-slate-800">0원</div>
+                            <div id="detail_ourMarginExc" class="text-[10px] text-slate-500">별도 0원</div>
+                        </div>
+                        <div class="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 space-y-1">
+                            <div class="text-[11px] font-extrabold text-amber-900">③ 쿠팡 납품가 (VAT포함)</div>
+                            <div class="relative">
+                                <input type="text" id="detail_input_supplyPrice" oninput="handleCurrencyInput(this); calculateDetailModalSim('supplyPrice');" class="w-full pl-2.5 pr-7 py-1.5 text-sm font-extrabold text-right text-slate-900 bg-white border border-amber-300 rounded-lg outline-none">
+                                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-700">원</span>
+                            </div>
+                            <div id="detail_supplyExc" class="text-[11px] text-slate-600">별도 0원</div>
+                            <div id="detail_supplyVat" class="text-[10px] text-slate-400">세액 0원</div>
+                        </div>
+                        <div class="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 space-y-1">
+                            <div class="text-[11px] font-extrabold text-amber-900">④ 쿠팡 마진율 (%)</div>
+                            <div class="relative">
+                                <input type="number" step="0.1" id="detail_input_coupangMarginRate" oninput="calculateDetailModalSim('coupangMarginRate')" class="w-full pl-2.5 pr-6 py-1.5 text-sm font-extrabold text-right text-amber-800 bg-white border border-amber-300 rounded-lg outline-none">
+                                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-700">%</span>
+                            </div>
+                            <div id="detail_coupangMarginInc" class="text-xs font-bold text-slate-800">0원</div>
+                            <div id="detail_coupangMarginExc" class="text-[10px] text-slate-500">별도 0원</div>
+                        </div>
+                        <div class="bg-amber-100/70 border border-amber-300 rounded-xl p-3.5 space-y-1">
+                            <div class="text-[11px] font-extrabold text-amber-950">⑤ 쿠팡 판매가 (VAT포함)</div>
+                            <div class="relative">
+                                <input type="text" id="detail_input_salePrice" oninput="handleCurrencyInput(this); calculateDetailModalSim('salePrice');" class="w-full pl-2.5 pr-7 py-1.5 text-sm font-extrabold text-right text-amber-950 bg-white border border-amber-400 rounded-lg outline-none">
+                                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-800">원</span>
+                            </div>
+                            <div id="detail_saleExc" class="text-[11px] text-slate-700">별도 0원</div>
+                            <div id="detail_saleVat" class="text-[10px] text-slate-500">세액 0원</div>
+                        </div>
+                        <div class="bg-indigo-50/80 border border-indigo-200 rounded-xl p-3.5 space-y-1">
+                            <div class="text-[11px] font-extrabold text-indigo-900">⑥ 개당 판매가</div>
+                            <div id="detail_perItemInc" class="text-base font-extrabold text-indigo-950 mt-1">0원</div>
+                            <div id="detail_perItemExc" class="text-[11px] text-slate-600">별도 0원</div>
+                            <div id="detail_perUnitLabel" class="text-[10px] font-bold text-indigo-700"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Special Notes & History Memo Box -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
+                    <h4 class="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
+                        <i class="fa-regular fa-note-sticky text-blue-600"></i> 특이사항 및 이력 메모
+                    </h4>
+                    <div id="detail_memoBox" class="text-xs sm:text-sm text-slate-700 bg-slate-50 p-3.5 rounded-xl border border-slate-200 min-h-[56px] font-medium whitespace-pre-line"></div>
+                </div>
+
+                <!-- Reference Vendors Table inside Detail Modal -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
+                            <i class="fa-solid fa-scale-balanced text-indigo-600"></i> 등록된 참고 업체 비교 목록
+                        </h4>
+                        <span id="detail_compSummaryTxt" class="text-xs font-bold text-slate-500"></span>
+                    </div>
+                    <div id="detail_compListContainer" class="overflow-x-auto"></div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="px-6 py-3.5 bg-white border-t border-slate-200 flex justify-end">
+                <button onclick="closeProductDetailModal()" class="px-5 py-2 rounded-xl text-xs font-extrabold bg-slate-800 hover:bg-slate-700 text-white transition">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- MODAL 1: 제품 수정 팝업 모달 (컴팩트 Max-W-5XL 1024px 적용으로 입력 동선 최적화) -->
+    <!-- =================================================================== -->
+    <div id="editProductModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-6 overflow-y-auto">
+        <div class="bg-white rounded-2xl w-[96vw] max-w-5xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col">
+            <div class="px-6 py-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-sm shrink-0">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                    </span>
+                    <div>
+                        <h3 class="text-base font-extrabold">등록 제품 정보 수정</h3>
+                        <p id="edit_modeDescText" class="text-[11px] text-slate-300">🔄 역산 모드(판매가 기준)로 원가 및 마진을 계산합니다.</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 self-end sm:self-auto">
+                    <!-- 수정 모달 내 역산 / 정산 원클릭 단일 토글 버튼 -->
+                    <button type="button" id="editModeToggleBtn" onclick="toggleEditCalcMode()" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white shadow-xs cursor-pointer">
+                        <i id="editModeToggleIcon" class="fa-solid fa-arrow-rotate-left"></i>
+                        <span id="editModeToggleText">역산</span>
+                    </button>
+                    <button onclick="closeEditProductModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1">
+                <input type="hidden" id="edit_id">
+
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                    <div class="sm:col-span-3">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">카테고리</label>
+                        <select id="edit_category" class="category-select-dropdown w-full px-3 py-2 text-sm font-semibold border border-slate-300 rounded-xl bg-white outline-none"></select>
+                    </div>
+                    <div class="sm:col-span-6">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">제품명 <span class="text-red-500">*</span></label>
+                        <input type="text" id="edit_name" class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="sm:col-span-3">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">개발 검토일</label>
+                        <input type="text" id="edit_reviewDate" placeholder="YYYY-MM-DD" onfocus="this.type='date'" onblur="if(!this.value) this.type='text'" class="w-full px-3 py-2 text-sm font-semibold border border-slate-300 rounded-xl bg-white outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-12 gap-3 bg-blue-50/50 p-3.5 rounded-xl border border-blue-100">
+                    <div class="col-span-1 sm:col-span-2">
+                        <label class="block text-[11px] font-bold text-slate-700 mb-1">입수량</label>
+                        <input type="number" id="edit_qty" min="1" step="1" oninput="calculateEditModal('salePrice')" class="w-full px-2.5 py-1.5 text-sm font-extrabold text-right bg-white border border-slate-300 rounded-lg">
+                    </div>
+                    <div class="col-span-1 sm:col-span-3">
+                        <label class="block text-[11px] font-bold text-slate-700 mb-1">사이즈/용량 수치</label>
+                        <input type="number" id="edit_sizeVal" step="any" oninput="calculateEditModal('salePrice')" class="w-full px-2.5 py-1.5 text-sm font-bold text-right bg-white border border-slate-300 rounded-lg">
+                    </div>
+                    <div class="col-span-1 sm:col-span-2 relative z-40">
+                        <label class="block text-[11px] font-bold text-slate-700 mb-1">단위</label>
+                        <div class="relative">
+                            <input type="text" id="edit_sizeUnit" readonly onclick="event.stopPropagation(); toggleUnitPicker('edit_unitPickerDropdown')" class="w-full px-2 py-1.5 text-sm font-bold text-center bg-white border border-slate-300 rounded-lg cursor-pointer hover:border-blue-500">
+                            <span class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"><i class="fa-solid fa-chevron-down"></i></span>
+                        </div>
+                        <div id="edit_unitPickerDropdown" class="unit-picker-dropdown absolute left-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-2xl z-[9999] hidden p-2 grid grid-cols-3 gap-1">
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('edit', 'ml')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">ml</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('edit', 'g')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">g</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('edit', 'L')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">L</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('edit', 'kg')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">kg</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('edit', 'oz')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">oz</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('edit', 'cm')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">cm</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('edit', 'mm')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">mm</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('edit', '매')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">매</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('edit', '개')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">개</button>
+                            <button type="button" onclick="event.stopPropagation(); selectUnit('edit', '포')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">포</button>
+                        </div>
+                    </div>
+                    <div class="col-span-2 sm:col-span-5">
+                        <label class="block text-[11px] font-bold text-slate-700 mb-1">구성 설명</label>
+                        <input type="text" id="edit_composition" class="w-full px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div id="editCard_cost" class="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200 space-y-2 transition-all">
+                        <div>
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="block text-[11px] font-bold text-blue-950">① 잘넷 매입가 (VAT포함)</label>
+                                <span id="editBadge_costBase" class="hidden px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-600 text-white">기준원가</span>
+                            </div>
+                            <div class="relative">
+                                <input type="text" id="edit_ourPurchaseCost" oninput="handleCurrencyInput(this); calculateEditModal('ourCost');" class="w-full pl-2.5 pr-7 py-1.5 text-sm font-extrabold text-right text-blue-900 bg-white border border-blue-300 rounded-lg">
+                                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-blue-700">원</span>
+                            </div>
+                            <div id="edit_vatSub_cost" class="text-[10px] text-blue-800 text-right mt-0.5"></div>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-blue-950">② 잘넷 마진율 (%)</label>
+                            <div class="relative">
+                                <input type="number" step="0.1" id="edit_ourMarginRate" oninput="calculateEditModal('ourMarginRate')" class="w-full pl-2.5 pr-6 py-1.5 text-sm font-bold text-right bg-white border border-slate-300 rounded-lg">
+                                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-700">%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3.5 rounded-xl bg-amber-50/50 border border-amber-200 space-y-2">
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-700 mb-1">③ 쿠팡 납품가 (VAT포함)</label>
+                            <div class="relative">
+                                <input type="text" id="edit_coupangSupplyPrice" oninput="handleCurrencyInput(this); calculateEditModal('supplyPrice');" class="w-full pl-2.5 pr-7 py-1.5 text-sm font-bold text-right bg-white border border-slate-300 rounded-lg">
+                                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-700">원</span>
+                            </div>
+                            <div id="edit_vatSub_supply" class="text-[10px] text-slate-500 text-right mt-0.5"></div>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-700">④ 쿠팡 마진율 (%)</label>
+                            <div class="relative">
+                                <input type="number" step="0.1" id="edit_coupangMarginRate" oninput="calculateEditModal('coupangMarginRate')" class="w-full pl-2.5 pr-6 py-1.5 text-sm font-bold text-right bg-white border border-slate-300 rounded-lg">
+                                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-700">%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="editCard_sale" class="p-3.5 rounded-xl bg-amber-50/80 border-2 border-amber-400 transition-all">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-xs font-extrabold text-amber-950">⑤ 쿠팡 판매가 (VAT포함)</label>
+                            <span id="editBadge_saleBase" class="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-500 text-white">기준가격</span>
+                        </div>
+                        <div class="relative">
+                            <input type="text" id="edit_coupangSalePrice" oninput="handleCurrencyInput(this); calculateEditModal('salePrice');" class="w-full pl-3 pr-8 py-2 text-base font-extrabold text-right text-amber-950 bg-white border border-amber-300 rounded-lg">
+                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-800">원</span>
+                        </div>
+                        <div id="edit_vatSub_sale" class="text-[11px] text-slate-600 text-right mt-1"></div>
+                        <div id="edit_unitPriceSub" class="text-[11px] font-bold text-indigo-700 text-right mt-0.5"></div>
+                    </div>
+                </div>
+
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
+                            <i class="fa-solid fa-clipboard-list text-blue-600"></i> 특이사항 및 이력 메모
+                        </label>
+                        <div id="edit_marginSummaryTxt" class="text-xs font-bold text-blue-700"></div>
+                    </div>
+                    <textarea id="edit_memo" rows="2" placeholder="KC인증번호, 마스터박스 입수량, 담당자 연락처, 검수 특이사항 등을 자유롭게 기록하세요." class="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-y"></textarea>
+                </div>
+
+                <div class="border-t border-slate-200 pt-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <h4 class="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                                <i class="fa-solid fa-store text-indigo-600"></i> 참고 업체 비교 정보 수정
+                            </h4>
+                            <p class="text-[11px] text-slate-400">컴팩트 2열 그리드로 한눈에 비교하고 간편하게 입력할 수 있습니다.</p>
+                        </div>
+                        <button type="button" onclick="addCompetitorRow('edit_compListContainer', null, 'edit', true)" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs">
+                            <i class="fa-solid fa-plus"></i> 참고업체 추가
+                        </button>
+                    </div>
+                    <!-- 수정 모달에서도 좌우로 너무 길어지지 않도록 2단 컴팩트 그리드 적용 -->
+                    <div id="edit_compListContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3 items-start"></div>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+                <button type="button" onclick="closeEditProductModal()" class="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 transition">취소</button>
+                <button type="button" onclick="saveEditedProduct()" class="px-6 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i> 수정사항 저장하기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- MODAL 2: 카테고리 & 색상 관리 모달 -->
+    <!-- =================================================================== -->
+    <div id="categoryModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto">
+            <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-palette text-indigo-400"></i>
+                    <h3 class="text-sm font-extrabold">카테고리 & 색상 관리</h3>
+                </div>
+                <button onclick="closeCategoryModal()" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-5 space-y-5">
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-extrabold text-slate-800">새 카테고리 추가</label>
+                        <button type="button" onclick="assignNextUnusedColorToNewInput()" class="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> 안 쓰는 색상 자동 선택
+                        </button>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input type="text" id="newCategoryInput" placeholder="새 카테고리명 (예: 캠핑/아웃도어)" onkeydown="if(event.key==='Enter') addCategory()" class="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <div class="flex items-center gap-1.5">
+                            <input type="color" id="newCatColorPicker" value="#3B82F6" oninput="syncNewCatColorFromPicker(this.value)" class="w-9 h-9 rounded-lg border border-slate-300 cursor-pointer bg-white p-0.5 shrink-0">
+                            <input type="text" id="newCatColorText" value="#3B82F6" placeholder="#HEX" oninput="syncNewCatColorFromText(this.value)" class="w-28 px-2.5 py-2 text-xs font-mono font-bold border border-slate-300 rounded-xl bg-white outline-none">
+                            <button onclick="addCategory()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-xl transition shrink-0">추가</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-[11px] font-semibold text-slate-500 mb-1.5">색상 레퍼런스 팔레트</div>
+                        <div id="colorPaletteChips" class="flex items-center gap-1.5 flex-wrap"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-extrabold text-slate-800">등록된 카테고리 목록</span>
+                        <button type="button" onclick="autoAssignUniqueColorsAll()" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition flex items-center gap-1">
+                            <i class="fa-solid fa-shuffle"></i> 전체 색상 겹치지 않게 일괄 배정
+                        </button>
+                    </div>
+                    <div id="categoryManagerList" class="space-y-2 max-h-64 overflow-y-auto pr-1"></div>
+                </div>
+            </div>
+
+            <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+                <button onclick="closeCategoryModal()" class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 text-white hover:bg-slate-700 transition">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- MODAL 3: 가격 경쟁력 등급 기준 안내 팝업 -->
+    <!-- =================================================================== -->
+    <div id="ratingCriteriaModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-circle-info text-blue-600"></i> 가격 경쟁력 등급 산정 기준
+                </h3>
+                <button onclick="closeRatingCriteriaModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-xs text-slate-700">
+                <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 space-y-1">
+                    <div class="font-extrabold text-emerald-800">가성비 우수 🟢</div>
+                    <p class="text-slate-600">등록된 참고 업체들의 평균 개당 단가 대비 당사 쿠팡 판매가(개당)가 <strong>3% 이상 저렴</strong>한 경우</p>
+                </div>
+                <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-1">
+                    <div class="font-extrabold text-amber-800">시장 적정 🟡</div>
+                    <p class="text-slate-600">참고 업체 평균 개당 단가 대비 <strong>±3% 이내</strong>로 가격이 형성되어 시장 경쟁력이 적정한 경우</p>
+                </div>
+                <div class="p-3 rounded-xl bg-rose-50 border border-rose-200 space-y-1">
+                    <div class="font-extrabold text-rose-800">가격 방어 필요 🔴</div>
+                    <p class="text-slate-600">참고 업체 평균 개당 단가 대비 당사 판매가가 <strong>3% 이상 비싸</strong> 가격 인하 검토나 방어가 필요한 경우</p>
+                </div>
+            </div>
+            <div class="flex justify-end pt-2">
+                <button onclick="closeRatingCriteriaModal()" class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 text-white hover:bg-slate-700 transition">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Modal -->
+    <div id="confirmModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200">
+            <h3 id="confirmModalTitle" class="text-base font-bold text-slate-900 mb-2">확인</h3>
+            <p id="confirmModalMessage" class="text-xs sm:text-sm text-slate-600 mb-5 leading-relaxed"></p>
+            <div class="flex justify-end gap-2">
+                <button id="confirmModalCancel" class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition">취소</button>
+                <button id="confirmModalOk" class="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-700 text-white transition">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <script>
+        const STORAGE_KEY_PRODUCTS = 'zalnet_coupang_analyzer_v3_products';
+        const STORAGE_KEY_CATEGORIES = 'zalnet_coupang_analyzer_v3_categories';
+        const STORAGE_KEY_SIM_DRAFT = 'zalnet_coupang_analyzer_v3_sim_draft';
+
+        const PRESET_PALETTE = [
+            { name: '슬레이트', hex: '#64748B' },
+            { name: '블루', hex: '#2563EB' },
+            { name: '에메랄드', hex: '#059669' },
+            { name: '앰버', hex: '#D97706' },
+            { name: '바이올렛', hex: '#7C3AED' },
+            { name: '로즈', hex: '#E11D48' },
+            { name: '시안', hex: '#0891B2' },
+            { name: '인디고', hex: '#4F46E5' },
+            { name: '틸', hex: '#0D9488' },
+            { name: '오렌지', hex: '#EA580C' },
+            { name: '핑크', hex: '#DB2777' },
+            { name: '라임', hex: '#65A30D' }
+        ];
+
+        const DEFAULT_CATEGORIES = [
+            { name: '미분류', color: '#64748B' },
+            { name: '생활용품', color: '#2563EB' },
+            { name: '주방/베이킹', color: '#059669' },
+            { name: '우양산/패션', color: '#7C3AED' },
+            { name: '시니어용품', color: '#D97706' },
+            { name: '소형가전', color: '#0891B2' }
+        ];
+
+        const DEFAULT_SAMPLE_PRODUCTS = [
+            {
+                id: 'prod-sample-1',
+                name: '에어프라이어 종이호일',
+                category: '주방/베이킹',
+                qty: 1,
+                sizeVal: 50,
+                sizeUnit: '매',
+                composition: '50매 X 2입',
+                coupangSalePrice: 10000,
+                coupangMarginRate: 40.0,
+                coupangSupplyPrice: 6000,
+                ourMarginRate: 25.0,
+                ourPurchaseCost: 4500,
+                extraCost: 0,
+                coupangMarginAmt: 4000,
+                ourMarginAmt: 1500,
+                memo: '• 무표백 실리콘 코팅 종이호일 샘플 검수 완료',
+                reviewDate: new Date().toISOString().slice(0, 10),
+                createdAt: Date.now() - 7200000,
+                competitors: [
+                    {
+                        id: 'c-101',
+                        brand: '키친아트 에어프라이어 종이호일',
+                        price: 11900,
+                        qty: 1,
+                        sizeVal: 100,
+                        sizeUnit: '매',
+                        spec: '100매입 1박스',
+                        url: 'https://www.coupang.com'
+                    }
+                ]
+            }
+        ];
+
+        let categories = [];
+        let products = [];
+        let selectedProductIds = new Set();
+        let expandedCompProductIds = new Set();
+        let activeCategoryFilter = '전체';
+        let detailOriginalProductSnapshot = null;
+        let currentSort = { col: 'createdAt', dir: 'desc' };
+        let currentCompSort = { col: 'price', dir: 'asc' };
+        let simCalcMode = 'reverse'; // 'reverse' (판매가 기준 역산) | 'forward' (매입가 기준 정산)
+        let editCalcMode = 'reverse';
+
+        function toggleSimCalcMode() {
+            setSimCalcMode(simCalcMode === 'reverse' ? 'forward' : 'reverse');
+        }
+
+        function setSimCalcMode(mode) {
+            simCalcMode = mode;
+            const btn = document.getElementById('simModeToggleBtn');
+            const icon = document.getElementById('simModeToggleIcon');
+            const txt = document.getElementById('simModeToggleText');
+            const desc = document.getElementById('sim_modeDescText');
+            const cardCost = document.getElementById('simCard_cost');
+            const cardSale = document.getElementById('simCard_sale');
+            const badgeCost = document.getElementById('simBadge_costBase');
+            const badgeSale = document.getElementById('simBadge_saleBase');
+
+            const icons = [
+                document.getElementById('simFlowIcon_1'),
+                document.getElementById('simFlowIcon_2'),
+                document.getElementById('simFlowIcon_3'),
+                document.getElementById('simFlowIcon_4')
+            ];
+
+            if (mode === 'reverse') {
+                if (btn) btn.className = 'px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm self-start lg:self-auto shrink-0 cursor-pointer';
+                if (icon) icon.className = 'fa-solid fa-arrow-rotate-left';
+                if (txt) txt.textContent = '역산';
+                if (desc) desc.innerHTML = '🔄 <strong>역산 모드:</strong> 쿠팡 판매가를 기준으로 마진율을 차감하여 납품가와 매입원가를 역산합니다.';
+                cardSale?.classList.add('border-2', 'border-amber-400', 'shadow-xs');
+                cardCost?.classList.remove('border-2', 'border-blue-500', 'shadow-xs');
+                badgeSale?.classList.remove('hidden');
+                badgeCost?.classList.add('hidden');
+                icons.forEach(ic => { if (ic) ic.className = 'fa-solid fa-arrow-left'; });
+                calculateSim('salePrice');
+            } else {
+                if (btn) btn.className = 'px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm self-start lg:self-auto shrink-0 cursor-pointer';
+                if (icon) icon.className = 'fa-solid fa-arrow-right';
+                if (txt) txt.textContent = '정산';
+                if (desc) desc.innerHTML = '➡️ <strong>정산 모드:</strong> 잘넷 매입원가를 기준으로 마진율을 반영하여 쿠팡 납품가와 판매가를 정산합니다.';
+                cardCost?.classList.add('border-2', 'border-blue-500', 'shadow-xs');
+                cardSale?.classList.remove('border-2', 'border-amber-400', 'shadow-xs');
+                badgeCost?.classList.remove('hidden');
+                badgeSale?.classList.add('hidden');
+                icons.forEach(ic => { if (ic) ic.className = 'fa-solid fa-arrow-right'; });
+                calculateSim('ourCost');
+            }
+        }
+
+        function toggleEditCalcMode() {
+            setEditCalcMode(editCalcMode === 'reverse' ? 'forward' : 'reverse');
+        }
+
+        function setEditCalcMode(mode) {
+            editCalcMode = mode;
+            const btn = document.getElementById('editModeToggleBtn');
+            const icon = document.getElementById('editModeToggleIcon');
+            const txt = document.getElementById('editModeToggleText');
+            const desc = document.getElementById('edit_modeDescText');
+            const cardCost = document.getElementById('editCard_cost');
+            const cardSale = document.getElementById('editCard_sale');
+            const badgeCost = document.getElementById('editBadge_costBase');
+            const badgeSale = document.getElementById('editBadge_saleBase');
+
+            if (mode === 'reverse') {
+                if (btn) btn.className = 'px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white shadow-xs cursor-pointer';
+                if (icon) icon.className = 'fa-solid fa-arrow-rotate-left';
+                if (txt) txt.textContent = '역산';
+                if (desc) desc.textContent = '🔄 역산 모드(판매가 기준)로 원가 및 마진을 계산합니다.';
+                cardSale?.classList.add('border-2', 'border-amber-400');
+                cardCost?.classList.remove('border-2', 'border-blue-500');
+                badgeSale?.classList.remove('hidden');
+                badgeCost?.classList.add('hidden');
+                calculateEditModal('salePrice');
+            } else {
+                if (btn) btn.className = 'px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs cursor-pointer';
+                if (icon) icon.className = 'fa-solid fa-arrow-right';
+                if (txt) txt.textContent = '정산';
+                if (desc) desc.textContent = '➡️ 정산 모드(매입가 기준)로 납품가 및 판매가를 계산합니다.';
+                cardCost?.classList.add('border-2', 'border-blue-500');
+                cardSale?.classList.remove('border-2', 'border-amber-400');
+                badgeCost?.classList.remove('hidden');
+                badgeSale?.classList.add('hidden');
+                calculateEditModal('ourCost');
+            }
+        }
+
+        function toggleVatSubDisplay(showVatSub) {
+            if (showVatSub) {
+                document.body.classList.remove('hide-vat-sub');
+            } else {
+                document.body.classList.add('hide-vat-sub');
+            }
+        }
+
+        function saveSimDraft() {
+            try {
+                const draft = {
+                    category: document.getElementById('sim_category')?.value || '주방/베이킹',
+                    name: document.getElementById('sim_name')?.value || '',
+                    reviewDate: document.getElementById('sim_reviewDate')?.value || '',
+                    qty: document.getElementById('sim_qty')?.value || '1',
+                    sizeVal: document.getElementById('sim_sizeVal')?.value || '',
+                    sizeUnit: document.getElementById('sim_sizeUnit')?.value || '매',
+                    composition: document.getElementById('sim_composition')?.value || '',
+                    salePrice: document.getElementById('sim_coupangSalePrice')?.value || '10,000',
+                    coupangMarginRate: document.getElementById('sim_coupangMarginRate')?.value || '40',
+                    ourMarginRate: document.getElementById('sim_ourMarginRate')?.value || '25',
+                    memo: document.getElementById('sim_memo')?.value || '',
+                    competitors: collectCompetitorsFromContainer('sim_compListContainer')
+                };
+                sessionStorage.setItem(STORAGE_KEY_SIM_DRAFT, JSON.stringify(draft));
+                const ind = document.getElementById('draftStatusIndicator');
+                if (ind) {
+                    ind.innerHTML = `<i class="fa-solid fa-check text-[10px] text-emerald-600"></i> 임시저장됨 (${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })})`;
+                }
+            } catch (e) {}
+        }
+
+        function loadSimDraft() {
+            try {
+                const raw = sessionStorage.getItem(STORAGE_KEY_SIM_DRAFT);
+                if (!raw) return false;
+                const d = JSON.parse(raw);
+                if (!d) return false;
+
+                if (d.category && categories.some(c => c.name === d.category)) {
+                    document.getElementById('sim_category').value = d.category;
+                }
+                if (d.name !== undefined) document.getElementById('sim_name').value = d.name;
+                const cleanDate = (d.reviewDate && !String(d.reviewDate).includes('(')) ? d.reviewDate : new Date().toISOString().slice(0, 10);
+                document.getElementById('sim_reviewDate').value = cleanDate;
+                if (d.qty) document.getElementById('sim_qty').value = d.qty;
+                if (d.sizeVal !== undefined) document.getElementById('sim_sizeVal').value = d.sizeVal;
+                if (d.sizeUnit) document.getElementById('sim_sizeUnit').value = d.sizeUnit;
+                if (d.composition !== undefined) document.getElementById('sim_composition').value = d.composition;
+                if (d.salePrice) document.getElementById('sim_coupangSalePrice').value = d.salePrice;
+                if (d.coupangMarginRate) document.getElementById('sim_coupangMarginRate').value = d.coupangMarginRate;
+                if (d.ourMarginRate) document.getElementById('sim_ourMarginRate').value = d.ourMarginRate;
+                if (d.memo !== undefined) document.getElementById('sim_memo').value = d.memo;
+
+                const compContainer = document.getElementById('sim_compListContainer');
+                compContainer.innerHTML = '';
+                if (Array.isArray(d.competitors) && d.competitors.length > 0) {
+                    d.competitors.forEach(c => addCompetitorRow('sim_compListContainer', c, 'sim', false));
+                }
+                calculateSim('salePrice');
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function parseNum(val) {
+            if (typeof val === 'number') return val;
+            if (!val) return 0;
+            const cleaned = String(val).replace(/[^\d.-]/g, '');
+            const num = parseFloat(cleaned);
+            return isNaN(num) ? 0 : num;
+        }
+
+        function formatComma(num) {
+            const rounded = Math.round(Number(num) || 0);
+            return rounded.toLocaleString('ko-KR');
+        }
+
+        function getVatBreakdown(vatIncludedAmount) {
+            const total = Math.round(Number(vatIncludedAmount) || 0);
+            const supply = Math.round(total / 1.1);
+            const vat = total - supply;
+            return { total, supply, vat };
+        }
+
+        function handleCurrencyInput(inputEl) {
+            const raw = inputEl.value.replace(/[^\d]/g, '');
+            inputEl.value = raw ? parseInt(raw, 10).toLocaleString('ko-KR') : '0';
+        }
+
+        function parseColorToHex(inputStr) {
+            if (!inputStr) return null;
+            const s = String(inputStr).trim();
+            const hexMatch = s.match(/^#?([0-9a-fA-F]{6})$/);
+            if (hexMatch) return '#' + hexMatch[1].toUpperCase();
+            return null;
+        }
+
+        function hexToRgbObj(hex) {
+            const clean = (hex || '#64748B').replace('#', '');
+            const r = parseInt(clean.substring(0, 2), 16) || 100;
+            const g = parseInt(clean.substring(2, 4), 16) || 116;
+            const b = parseInt(clean.substring(4, 6), 16) || 139;
+            return { r, g, b };
+        }
+
+        function getCategoryColor(catName) {
+            const found = categories.find(c => c.name === (catName || '미분류'));
+            return found ? found.color : '#64748B';
+        }
+
+        function renderCategoryBadgeHtml(catName) {
+            const name = catName || '미분류';
+            const hex = getCategoryColor(name);
+            const { r, g, b } = hexToRgbObj(hex);
+            return `
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-extrabold whitespace-nowrap"
+                      style="background-color: rgba(${r},${g},${b},0.12); color: ${hex}; border: 1px solid rgba(${r},${g},${b},0.3);">
+                    <span class="w-2 h-2 rounded-full shrink-0" style="background-color: ${hex};"></span>
+                    ${escapeHtml(name)}
+                </span>
+            `;
+        }
+
+        function getNextUnusedColor() {
+            const usedColors = new Set(categories.map(c => (c.color || '').toUpperCase()));
+            for (const preset of PRESET_PALETTE) {
+                if (!usedColors.has(preset.hex.toUpperCase())) return preset.hex.toUpperCase();
+            }
+            return '#2563EB';
+        }
+
+        function getUnitPriceAnalysis(salePrice, qty, sizeVal, sizeUnit) {
+            const validQty = Math.max(1, parseNum(qty) || 1);
+            const perItemInc = Math.round(salePrice / validQty);
+            const perItemExc = Math.round(perItemInc / 1.1);
+
+            const numSize = parseNum(sizeVal);
+            const unitStr = (sizeUnit || '').trim();
+            let unitLabel = '';
+
+            if (numSize > 0 && unitStr) {
+                const totalSize = validQty * numSize;
+                const lowerUnit = unitStr.toLowerCase();
+                if (lowerUnit === 'ml' || lowerUnit === 'g') {
+                    const per100 = Math.round((salePrice / totalSize) * 100);
+                    unitLabel = `100${unitStr}당 ${formatComma(per100)}원`;
+                } else {
+                    const per1 = Math.round(salePrice / totalSize);
+                    unitLabel = `1${unitStr}당 ${formatComma(per1)}원`;
+                }
+            }
+
+            return {
+                qty: validQty,
+                perItemInc,
+                perItemExc,
+                unitLabel,
+                specSummary: `입수량 ${validQty}개${numSize > 0 ? ` × ${numSize}${unitStr}` : ''}`
+            };
+        }
+
+        function getPriceCompetitivenessInfo(prod) {
+            const comps = (prod.competitors || []).filter(c => parseNum(c.price) > 0);
+            if (comps.length === 0) {
+                return {
+                    status: 'none',
+                    label: '비교없음',
+                    badgeHtml: `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-400">-</span>`,
+                    avgCompPerItem: 0,
+                    diffPercent: 0
+                };
+            }
+
+            const ourUnit = getUnitPriceAnalysis(prod.coupangSalePrice, prod.qty, prod.sizeVal, prod.sizeUnit);
+            const avgCompPerItem = Math.round(
+                comps.reduce((acc, c) => {
+                    const cQty = Math.max(1, parseNum(c.qty) || 1);
+                    return acc + (parseNum(c.price) / cQty);
+                }, 0) / comps.length
+            );
+
+            if (avgCompPerItem <= 0) {
+                return {
+                    status: 'none',
+                    label: '비교없음',
+                    badgeHtml: `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-400">-</span>`,
+                    avgCompPerItem: 0,
+                    diffPercent: 0
+                };
+            }
+
+            const ratio = (ourUnit.perItemInc - avgCompPerItem) / avgCompPerItem;
+            const diffPercent = Math.round(ratio * 100);
+
+            if (ratio < -0.03) {
+                return {
+                    status: 'good',
+                    label: '가성비 우수 🟢',
+                    badgeHtml: `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap cursor-pointer hover:bg-emerald-100 transition" onclick="openRatingCriteriaModal()" title="클릭하여 등급 산정 기준 확인">가성비 우수 🟢</span>`,
+                    avgCompPerItem,
+                    diffPercent
+                };
+            } else if (ratio <= 0.03) {
+                return {
+                    status: 'fair',
+                    label: '시장 적정 🟡',
+                    badgeHtml: `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap cursor-pointer hover:bg-amber-100 transition" onclick="openRatingCriteriaModal()" title="클릭하여 등급 산정 기준 확인">시장 적정 🟡</span>`,
+                    avgCompPerItem,
+                    diffPercent
+                };
+            } else {
+                return {
+                    status: 'warning',
+                    label: '가격 방어 필요 🔴',
+                    badgeHtml: `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap cursor-pointer hover:bg-rose-100 transition" onclick="openRatingCriteriaModal()" title="클릭하여 등급 산정 기준 확인">가격 방어 필요 🔴</span>`,
+                    avgCompPerItem,
+                    diffPercent
+                };
+            }
+        }
+
+        function switchMainTab(tab) {
+            const secSim = document.getElementById('tabSection_sim');
+            const secList = document.getElementById('tabSection_list');
+            const btnSim = document.getElementById('mainTabBtn_sim');
+            const btnList = document.getElementById('mainTabBtn_list');
+            const badge = document.getElementById('navProductCountBadge');
+
+            if (tab === 'sim') {
+                secSim.classList.remove('hidden');
+                secList.classList.add('hidden');
+                btnSim.className = 'px-5 py-2.5 rounded-xl text-sm font-extrabold bg-blue-600 text-white shadow-sm flex items-center gap-2 transition';
+                btnList.className = 'px-5 py-2.5 rounded-xl text-sm font-bold text-slate-300 hover:text-white hover:bg-slate-800 flex items-center gap-2 transition';
+                if (badge) badge.className = 'px-2 py-0.5 text-xs rounded-full bg-slate-700 text-slate-200 font-extrabold';
+            } else {
+                secSim.classList.add('hidden');
+                secList.classList.remove('hidden');
+                btnList.className = 'px-5 py-2.5 rounded-xl text-sm font-extrabold bg-blue-600 text-white shadow-sm flex items-center gap-2 transition';
+                btnSim.className = 'px-5 py-2.5 rounded-xl text-sm font-bold text-slate-300 hover:text-white hover:bg-slate-800 flex items-center gap-2 transition';
+                if (badge) badge.className = 'px-2 py-0.5 text-xs rounded-full bg-white text-blue-700 font-extrabold';
+                renderProductList();
+            }
+        }
+
+        function populateCategoryDropdowns() {
+            const dropdowns = document.querySelectorAll('.category-select-dropdown');
+            dropdowns.forEach(select => {
+                const currentVal = select.value;
+                select.innerHTML = categories.map(cat => `<option value="${escapeHtml(cat.name)}">${escapeHtml(cat.name)}</option>`).join('');
+                if (categories.some(c => c.name === currentVal)) select.value = currentVal;
+            });
+            renderCategoryFilterPills();
+        }
+
+        function renderCategoryFilterPills() {
+            const container = document.getElementById('categoryFilterPills');
+            if (!container) return;
+
+            const totalCount = products.length;
+            let html = `
+                <button onclick="setCategoryFilter('전체')" class="px-3 py-1.5 rounded-xl text-xs font-extrabold transition ${activeCategoryFilter === '전체' ? 'bg-slate-900 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+                    전체 (${totalCount})
+                </button>
+            `;
+
+            categories.forEach(cat => {
+                const count = products.filter(p => (p.category || '미분류') === cat.name).length;
+                const isActive = activeCategoryFilter === cat.name;
+                const { r, g, b } = hexToRgbObj(cat.color);
+                const styleStr = isActive
+                    ? `background-color: ${cat.color}; color: #ffffff; border: 1px solid ${cat.color};`
+                    : `background-color: rgba(${r},${g},${b},0.1); color: ${cat.color}; border: 1px solid rgba(${r},${g},${b},0.28);`;
+
+                html += `
+                    <button onclick="setCategoryFilter('${escapeHtml(cat.name)}')" style="${styleStr}" class="px-3 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 hover:opacity-90">
+                        <span class="w-2 h-2 rounded-full" style="background-color: ${isActive ? '#ffffff' : cat.color};"></span>
+                        <span>${escapeHtml(cat.name)} (${count})</span>
+                    </button>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function setCategoryFilter(catName) {
+            activeCategoryFilter = catName;
+            renderCategoryFilterPills();
+            renderProductList();
+        }
+
+        function openCategoryModal() {
+            assignNextUnusedColorToNewInput();
+            renderPaletteReferenceChips();
+            renderCategoryManagerList();
+            const modal = document.getElementById('categoryModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeCategoryModal() {
+            const modal = document.getElementById('categoryModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function syncNewCatColorFromPicker(hexVal) {
+            document.getElementById('newCatColorText').value = hexVal.toUpperCase();
+        }
+
+        function syncNewCatColorFromText(textVal) {
+            const parsed = parseColorToHex(textVal);
+            if (parsed) document.getElementById('newCatColorPicker').value = parsed;
+        }
+
+        function assignNextUnusedColorToNewInput() {
+            const nextColor = getNextUnusedColor();
+            document.getElementById('newCatColorPicker').value = nextColor;
+            document.getElementById('newCatColorText').value = nextColor;
+        }
+
+        function selectPresetColorForNew(hexVal) {
+            document.getElementById('newCatColorPicker').value = hexVal;
+            document.getElementById('newCatColorText').value = hexVal;
+        }
+
+        function renderPaletteReferenceChips() {
+            const container = document.getElementById('colorPaletteChips');
+            if (!container) return;
+            const usedSet = new Set(categories.map(c => (c.color || '').toUpperCase()));
+
+            container.innerHTML = PRESET_PALETTE.map(p => {
+                const isUsed = usedSet.has(p.hex.toUpperCase());
+                return `
+                    <button type="button" onclick="selectPresetColorForNew('${p.hex}')"
+                            class="px-2.5 py-1 rounded-lg text-[11px] font-bold text-white flex items-center gap-1.5 shadow-2xs hover:scale-105 transition"
+                            style="background-color: ${p.hex};" title="${p.name} (${p.hex})">
+                        <span>${p.name}</span>
+                        ${isUsed ? '<span class="w-1.5 h-1.5 rounded-full bg-white"></span>' : ''}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function renderCategoryManagerList() {
+            const listEl = document.getElementById('categoryManagerList');
+            listEl.innerHTML = categories.map((cat, idx) => {
+                const count = products.filter(p => (p.category || '미분류') === cat.name).length;
+                const isDefaultUncategorized = cat.name === '미분류';
+                return `
+                    <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                        <div class="flex items-center gap-2 flex-1">
+                            <input type="color" id="catColorPicker_${idx}" value="${cat.color}" oninput="document.getElementById('catColorText_${idx}').value = this.value.toUpperCase()" class="w-7 h-7 rounded cursor-pointer border border-slate-300 bg-white p-0.5 shrink-0">
+                            <input type="text" id="catColorText_${idx}" value="${cat.color}" oninput="const h = parseColorToHex(this.value); if(h) document.getElementById('catColorPicker_${idx}').value = h;" class="w-24 px-2 py-1 text-[11px] font-mono font-bold bg-white border border-slate-300 rounded-lg text-slate-700">
+                            <input type="text" id="catEditInput_${idx}" value="${escapeHtml(cat.name)}" ${isDefaultUncategorized ? 'readonly' : ''} class="w-full px-2.5 py-1 text-xs font-bold ${isDefaultUncategorized ? 'bg-transparent text-slate-500' : 'bg-white border border-slate-300 rounded-lg text-slate-800'}">
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <span class="text-[11px] text-slate-400 mr-1">${count}개</span>
+                            <button onclick="updateCategoryItem(${idx})" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition">저장</button>
+                            ${!isDefaultUncategorized ? `<button onclick="deleteCategory(${idx})" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 transition">삭제</button>` : `<span class="text-[10px] text-slate-400 px-1.5">기본</span>`}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function addCategory() {
+            const input = document.getElementById('newCategoryInput');
+            const name = input.value.trim();
+            if (!name) { showToast('카테고리 이름을 입력해주세요.', 'warning'); return; }
+            if (categories.some(c => c.name === name)) { showToast('이미 존재하는 카테고리입니다.', 'warning'); return; }
+
+            const rawColorText = document.getElementById('newCatColorText').value;
+            let hexColor = parseColorToHex(rawColorText) || document.getElementById('newCatColorPicker').value || getNextUnusedColor();
+
+            categories.push({ name, color: hexColor.toUpperCase() });
+            input.value = '';
+            saveCategoriesToStorage();
+            populateCategoryDropdowns();
+            assignNextUnusedColorToNewInput();
+            renderPaletteReferenceChips();
+            renderCategoryManagerList();
+            renderProductList();
+            showToast(`'${name}' 카테고리가 추가되었습니다.`, 'success');
+        }
+
+        function updateCategoryItem(idx) {
+            const oldCat = categories[idx];
+            const nameInput = document.getElementById(`catEditInput_${idx}`);
+            const colorTextInput = document.getElementById(`catColorText_${idx}`);
+            const colorPickerInput = document.getElementById(`catColorPicker_${idx}`);
+
+            const newName = oldCat.name === '미분류' ? '미분류' : (nameInput ? nameInput.value.trim() : oldCat.name);
+            if (!newName) { showToast('카테고리 이름을 비워둘 수 없습니다.', 'warning'); return; }
+
+            const parsedHex = parseColorToHex(colorTextInput?.value) || colorPickerInput?.value || oldCat.color;
+            const oldName = oldCat.name;
+
+            categories[idx] = { name: newName, color: parsedHex.toUpperCase() };
+
+            if (oldName !== newName) {
+                products.forEach(p => { if (p.category === oldName) p.category = newName; });
+                if (activeCategoryFilter === oldName) activeCategoryFilter = newName;
+            }
+
+            saveCategoriesToStorage();
+            saveProductsToStorage();
+            populateCategoryDropdowns();
+            renderPaletteReferenceChips();
+            renderCategoryManagerList();
+            renderProductList();
+            showToast(`'${newName}' 카테고리 설정이 저장되었습니다.`, 'success');
+        }
+
+        function autoAssignUniqueColorsAll() {
+            categories.forEach((cat, idx) => {
+                cat.color = (idx < PRESET_PALETTE.length ? PRESET_PALETTE[idx].hex : hslToHex((idx * 137.508) % 360, 70, 45)).toUpperCase();
+            });
+            saveCategoriesToStorage();
+            populateCategoryDropdowns();
+            renderPaletteReferenceChips();
+            renderCategoryManagerList();
+            renderProductList();
+            showToast('모든 카테고리에 겹치지 않는 색상이 자동 배정되었습니다.', 'success');
+        }
+
+        function deleteCategory(idx) {
+            const targetCat = categories[idx];
+            if (!targetCat || targetCat.name === '미분류') return;
+
+            openConfirmModal('카테고리 삭제', `'${targetCat.name}' 카테고리를 삭제하시겠습니까?`, () => {
+                categories.splice(idx, 1);
+                products.forEach(p => { if (p.category === targetCat.name) p.category = '미분류'; });
+                if (activeCategoryFilter === targetCat.name) activeCategoryFilter = '전체';
+                saveCategoriesToStorage();
+                saveProductsToStorage();
+                populateCategoryDropdowns();
+                renderPaletteReferenceChips();
+                renderCategoryManagerList();
+                renderProductList();
+                showToast('삭제되었습니다.', 'info');
+            });
+        }
+
+        // Unit Picker Handling
+        function toggleUnitPicker(dropdownId) {
+            const el = document.getElementById(dropdownId);
+            if (!el) return;
+            const isHidden = el.classList.contains('hidden');
+            document.querySelectorAll('.unit-picker-dropdown').forEach(d => d.classList.add('hidden'));
+            document.getElementById('sim_unitPickerDropdown')?.classList.add('hidden');
+            document.getElementById('edit_unitPickerDropdown')?.classList.add('hidden');
+            if (isHidden) {
+                el.classList.remove('hidden');
+            }
+        }
+
+        function selectUnit(dropdownIdOrContext, unitVal) {
+            if (dropdownIdOrContext === 'sim') {
+                document.getElementById('sim_sizeUnit').value = unitVal;
+                document.getElementById('sim_unitPickerDropdown').classList.add('hidden');
+                calculateSim('salePrice');
+                saveSimDraft();
+            } else if (dropdownIdOrContext === 'edit') {
+                document.getElementById('edit_sizeUnit').value = unitVal;
+                document.getElementById('edit_unitPickerDropdown').classList.add('hidden');
+                calculateEditModal('salePrice');
+            } else {
+                const dropEl = document.getElementById(dropdownIdOrContext);
+                if (dropEl) {
+                    const wrapper = dropEl.parentElement;
+                    const inputEl = wrapper ? wrapper.querySelector('.comp-sizeUnit') : null;
+                    if (inputEl) inputEl.value = unitVal;
+                    dropEl.classList.add('hidden');
+                    const rowItem = dropEl.closest('.comp-row-item');
+                    if (rowItem) {
+                        const context = rowItem.dataset.context;
+                        if (context === 'sim') {
+                            calculateSim('salePrice');
+                            saveSimDraft();
+                        } else {
+                            calculateEditModal('salePrice');
+                        }
+                    }
+                }
+            }
+        }
+
+        window.addEventListener('click', function(e) {
+            if (!e.target.closest('#sim_sizeUnit') && !e.target.closest('#sim_unitPickerDropdown')) {
+                document.getElementById('sim_unitPickerDropdown')?.classList.add('hidden');
+            }
+            if (!e.target.closest('#edit_sizeUnit') && !e.target.closest('#edit_unitPickerDropdown')) {
+                document.getElementById('edit_unitPickerDropdown')?.classList.add('hidden');
+            }
+            if (!e.target.closest('.comp-unit-trigger') && !e.target.closest('.unit-picker-dropdown')) {
+                document.querySelectorAll('.unit-picker-dropdown').forEach(d => d.classList.add('hidden'));
+            }
+        });
+
+        function calculateSim(changedField = 'salePrice') {
+            const salePriceEl = document.getElementById('sim_coupangSalePrice');
+            if (!salePriceEl) return null;
+
+            let salePrice = parseNum(salePriceEl.value);
+            const qty = Math.max(1, parseNum(document.getElementById('sim_qty')?.value) || 1);
+            const sizeVal = document.getElementById('sim_sizeVal')?.value;
+            const sizeUnit = document.getElementById('sim_sizeUnit')?.value;
+
+            let coupangMarginRate = parseNum(document.getElementById('sim_coupangMarginRate')?.value);
+            let coupangSupplyPrice = parseNum(document.getElementById('sim_coupangSupplyPrice')?.value);
+            let ourMarginRate = parseNum(document.getElementById('sim_ourMarginRate')?.value);
+            let ourPurchaseCost = parseNum(document.getElementById('sim_ourPurchaseCost')?.value);
+
+            if (simCalcMode === 'forward') {
+                // 정산 모드: ① 매입가 ➔ ③ 납품가 ➔ ⑤ 판매가 방향으로 계산
+                if (changedField === 'ourCost' || changedField === 'ourMarginRate') {
+                    const denomOur = 1 - (ourMarginRate / 100);
+                    coupangSupplyPrice = denomOur > 0.01 ? Math.round(ourPurchaseCost / denomOur) : ourPurchaseCost;
+                    document.getElementById('sim_coupangSupplyPrice').value = formatComma(coupangSupplyPrice);
+
+                    const denomCoupang = 1 - (coupangMarginRate / 100);
+                    salePrice = denomCoupang > 0.01 ? Math.round(coupangSupplyPrice / denomCoupang) : coupangSupplyPrice;
+                    document.getElementById('sim_coupangSalePrice').value = formatComma(salePrice);
+                } else if (changedField === 'supplyPrice') {
+                    ourMarginRate = coupangSupplyPrice > 0 ? ((coupangSupplyPrice - ourPurchaseCost) / coupangSupplyPrice) * 100 : 0;
+                    document.getElementById('sim_ourMarginRate').value = ourMarginRate.toFixed(1);
+
+                    const denomCoupang = 1 - (coupangMarginRate / 100);
+                    salePrice = denomCoupang > 0.01 ? Math.round(coupangSupplyPrice / denomCoupang) : coupangSupplyPrice;
+                    document.getElementById('sim_coupangSalePrice').value = formatComma(salePrice);
+                } else if (changedField === 'coupangMarginRate') {
+                    const denomCoupang = 1 - (coupangMarginRate / 100);
+                    salePrice = denomCoupang > 0.01 ? Math.round(coupangSupplyPrice / denomCoupang) : coupangSupplyPrice;
+                    document.getElementById('sim_coupangSalePrice').value = formatComma(salePrice);
+                } else if (changedField === 'salePrice') {
+                    coupangMarginRate = salePrice > 0 ? ((salePrice - coupangSupplyPrice) / salePrice) * 100 : 0;
+                    document.getElementById('sim_coupangMarginRate').value = coupangMarginRate.toFixed(1);
+                }
+            } else {
+                // 역산 모드: ⑤ 판매가 ➔ ③ 납품가 ➔ ① 매입가 방향으로 계산
+                if (changedField === 'salePrice' || changedField === 'coupangMarginRate') {
+                    coupangSupplyPrice = Math.round(salePrice * (1 - coupangMarginRate / 100));
+                    document.getElementById('sim_coupangSupplyPrice').value = formatComma(coupangSupplyPrice);
+                    ourPurchaseCost = Math.round(coupangSupplyPrice * (1 - ourMarginRate / 100));
+                    document.getElementById('sim_ourPurchaseCost').value = formatComma(ourPurchaseCost);
+                } else if (changedField === 'supplyPrice') {
+                    coupangMarginRate = salePrice > 0 ? ((salePrice - coupangSupplyPrice) / salePrice) * 100 : 0;
+                    document.getElementById('sim_coupangMarginRate').value = coupangMarginRate.toFixed(1);
+                    ourPurchaseCost = Math.round(coupangSupplyPrice * (1 - ourMarginRate / 100));
+                    document.getElementById('sim_ourPurchaseCost').value = formatComma(ourPurchaseCost);
+                } else if (changedField === 'ourMarginRate') {
+                    ourPurchaseCost = Math.round(coupangSupplyPrice * (1 - ourMarginRate / 100));
+                    document.getElementById('sim_ourPurchaseCost').value = formatComma(ourPurchaseCost);
+                } else if (changedField === 'ourCost') {
+                    ourMarginRate = coupangSupplyPrice > 0 ? ((coupangSupplyPrice - ourPurchaseCost) / coupangSupplyPrice) * 100 : 0;
+                    document.getElementById('sim_ourMarginRate').value = ourMarginRate.toFixed(1);
+                } else {
+                    coupangSupplyPrice = Math.round(salePrice * (1 - coupangMarginRate / 100));
+                    document.getElementById('sim_coupangSupplyPrice').value = formatComma(coupangSupplyPrice);
+                    ourPurchaseCost = Math.round(coupangSupplyPrice * (1 - ourMarginRate / 100));
+                    document.getElementById('sim_ourPurchaseCost').value = formatComma(ourPurchaseCost);
+                }
+            }
+
+            const coupangMarginAmt = salePrice - coupangSupplyPrice;
+            const ourMarginAmt = coupangSupplyPrice - ourPurchaseCost;
+
+            const vatSale = getVatBreakdown(salePrice);
+            const vatSupply = getVatBreakdown(coupangSupplyPrice);
+            const vatCost = getVatBreakdown(ourPurchaseCost);
+            const vatOurMargin = getVatBreakdown(ourMarginAmt);
+            const vatCoupangMargin = getVatBreakdown(coupangMarginAmt);
+
+            document.getElementById('sim_vatSub_sale').innerHTML = `VAT 별도: <strong>${formatComma(vatSale.supply)}원</strong>`;
+            document.getElementById('sim_vatSub_supply').innerHTML = `VAT 별도: ${formatComma(vatSupply.supply)}원`;
+            document.getElementById('sim_vatSub_cost').innerHTML = `VAT 별도: ${formatComma(vatCost.supply)}원`;
+
+            const unitInfo = getUnitPriceAnalysis(salePrice, qty, sizeVal, sizeUnit);
+            const vatPerItem = getVatBreakdown(unitInfo.perItemInc);
+            document.getElementById('sim_res_perSizeBadge').textContent = unitInfo.unitLabel || `입수량 ${unitInfo.qty}개`;
+
+            document.getElementById('sim_res_ourMarginInc').textContent = `${formatComma(ourMarginAmt)}원`;
+            document.getElementById('sim_res_ourMarginExc').textContent = `VAT 별도: ${formatComma(vatOurMargin.supply)}원`;
+            document.getElementById('sim_res_coupangMarginInc').textContent = `${formatComma(coupangMarginAmt)}원`;
+            document.getElementById('sim_res_coupangMarginExc').textContent = `VAT 별도: ${formatComma(vatCoupangMargin.supply)}원`;
+            document.getElementById('sim_res_perItemPrice').textContent = `${formatComma(unitInfo.perItemInc)}원`;
+            document.getElementById('sim_res_perItemExc').textContent = `VAT 별도: ${formatComma(vatPerItem.supply)}원`;
+
+            const badge = document.getElementById('sim_profitStatusBadge');
+            if (badge) {
+                if (ourMarginAmt < 0 || ourPurchaseCost < 0) {
+                    badge.textContent = '⚠️ 적자 또는 원가 초과';
+                    badge.className = 'text-[11px] font-bold px-3 py-1 rounded-full bg-red-100 text-red-700 border border-red-300';
+                } else if (ourMarginRate < 15) {
+                    badge.textContent = '저마진 구간 (15% 미만)';
+                    badge.className = 'text-[11px] font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300';
+                } else {
+                    badge.textContent = '양호한 마진 구간';
+                    badge.className = 'text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-800 border border-emerald-500/30';
+                }
+            }
+
+            updateCompetitorRowsComparison('sim_compListContainer', unitInfo.perItemInc);
+            saveSimDraft();
+
+            return {
+                salePrice,
+                coupangMarginRate: Number(Number(coupangMarginRate).toFixed(1)),
+                coupangSupplyPrice,
+                ourMarginRate: Number(Number(ourMarginRate).toFixed(1)),
+                ourPurchaseCost,
+                extraCost: 0,
+                coupangMarginAmt,
+                ourMarginAmt
+            };
+        }
+
+        // Accordion Competitors
+        function toggleCompAccordion(headerEl) {
+            const body = headerEl.nextElementSibling;
+            const icon = headerEl.querySelector('.comp-accordion-icon');
+            if (body.classList.contains('hidden')) {
+                body.classList.remove('hidden');
+                icon.classList.add('rotate-180');
+            } else {
+                body.classList.add('hidden');
+                icon.classList.remove('rotate-180');
+            }
+        }
+
+        function openInputUrl(btnEl) {
+            const urlInput = btnEl.parentElement.querySelector('.comp-url');
+            const rawUrl = urlInput ? urlInput.value.trim() : '';
+            if (!rawUrl) {
+                showToast('이동할 판매 페이지 링크(URL)를 먼저 입력해주세요.', 'warning');
+                return;
+            }
+            const target = /^https?:\/\//i.test(rawUrl) ? rawUrl : 'https://' + rawUrl;
+            window.open(target, '_blank', 'noopener,noreferrer');
+        }
+
+        function updateCompHeader(inputEl) {
+            const rowItem = inputEl.closest('.comp-row-item');
+            if (!rowItem) return;
+            const brandVal = rowItem.querySelector('.comp-brand').value.trim();
+            const priceVal = rowItem.querySelector('.comp-price').value.trim();
+            rowItem.querySelector('.comp-header-title').textContent = brandVal || '새 참고업체';
+            rowItem.querySelector('.comp-header-price').textContent = priceVal || '0';
+        }
+
+        function addCompetitorRow(containerId, compData = null, context = 'sim', forceExpand = null) {
+            const container = document.getElementById(containerId);
+            const rowId = 'comp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+
+            // 기존 저장된 참고업체를 불러올 때는 접힘(false), 새로 추가 버튼을 눌렀을 때는 펼침(true)
+            const isExpanded = forceExpand !== null ? forceExpand : (compData === null);
+
+            const brand = compData ? compData.brand : '';
+            const price = compData ? formatComma(compData.price) : '10,000';
+            const qty = compData && compData.qty ? compData.qty : 1;
+            const sizeVal = compData && compData.sizeVal ? compData.sizeVal : '';
+            const sizeUnit = compData && compData.sizeUnit ? compData.sizeUnit : '매';
+            const spec = compData ? compData.spec : '';
+            const url = compData ? compData.url : '';
+
+            const triggerFn = context === 'sim' ? "calculateSim('salePrice')" : "calculateEditModal('salePrice')";
+
+            const div = document.createElement('div');
+            div.id = rowId;
+            div.dataset.context = context;
+            // 컴팩트 카드 스타일 및 단위 드롭다운 잘림 방지
+            div.className = 'comp-row-item bg-white rounded-xl border border-slate-200 shadow-2xs overflow-visible relative';
+            
+            div.innerHTML = `
+                <div class="flex items-center justify-between px-3.5 py-2.5 cursor-pointer bg-slate-100/90 hover:bg-slate-200/70 transition rounded-t-xl comp-accordion-header" onclick="toggleCompAccordion(this)">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="w-5 h-5 rounded-md bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] shrink-0"><i class="fa-solid fa-store"></i></span>
+                        <div class="font-bold text-xs text-slate-800 truncate">
+                            <span class="comp-header-title">${escapeHtml(brand) || '새 참고업체'}</span>
+                            <span class="text-slate-500 font-semibold ml-1">(<span class="comp-header-price">${price}</span>원)</span>
+                        </div>
+                        <span class="comp-header-diff-badge ml-1 shrink-0"></span>
+                    </div>
+                    <div class="flex items-center gap-2.5 shrink-0">
+                        <button type="button" onclick="event.stopPropagation(); document.getElementById('${rowId}').remove(); ${triggerFn}" class="text-red-500 hover:text-red-700 p-1 text-xs" title="삭제"><i class="fa-solid fa-trash-can"></i></button>
+                        <i class="fa-solid fa-chevron-down text-slate-400 text-xs transition-transform duration-200 comp-accordion-icon ${isExpanded ? 'rotate-180' : ''}"></i>
+                    </div>
+                </div>
+                <div class="comp-accordion-body ${isExpanded ? '' : 'hidden'} p-3.5 space-y-2.5 border-t border-slate-200 bg-white rounded-b-xl">
+                    <!-- 1줄: 업체/제품명 + 판매가 -->
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                        <div class="sm:col-span-7">
+                            <label class="block text-[10px] font-bold text-slate-600 mb-0.5">참고업체 제품명</label>
+                            <input type="text" placeholder="예: 타사 비교 제품명" value="${escapeHtml(brand)}" oninput="updateCompHeader(this); ${triggerFn}" class="comp-brand w-full px-2.5 py-1.5 text-xs font-bold bg-slate-50 focus:bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div class="sm:col-span-5">
+                            <label class="block text-[10px] font-bold text-slate-600 mb-0.5">판매가 (VAT포함)</label>
+                            <div class="relative">
+                                <input type="text" value="${price}" oninput="handleCurrencyInput(this); updateCompHeader(this); ${triggerFn}" class="comp-price w-full pl-2.5 pr-6 py-1.5 text-xs font-extrabold text-slate-900 bg-slate-50 focus:bg-white border border-slate-300 rounded-lg outline-none text-right focus:ring-2 focus:ring-indigo-500">
+                                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">원</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 2줄: 입수량 + 용량 + 단위 + 구성설명 -->
+                    <div class="grid grid-cols-3 sm:grid-cols-12 gap-2">
+                        <div class="col-span-1 sm:col-span-2">
+                            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">입수량</label>
+                            <input type="number" min="1" step="1" value="${qty}" oninput="${triggerFn}" class="comp-qty w-full px-2 py-1.5 text-xs font-bold text-right bg-slate-50 focus:bg-white border border-slate-300 rounded-lg">
+                        </div>
+                        <div class="col-span-1 sm:col-span-3">
+                            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">용량/규격</label>
+                            <input type="number" step="any" placeholder="예: 50" value="${sizeVal}" oninput="${triggerFn}" class="comp-sizeVal w-full px-2 py-1.5 text-xs font-bold text-right bg-slate-50 focus:bg-white border border-slate-300 rounded-lg">
+                        </div>
+                        <div class="col-span-1 sm:col-span-2 relative z-40">
+                            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">단위</label>
+                            <div class="relative">
+                                <div class="comp-unit-trigger relative cursor-pointer" onclick="event.stopPropagation(); toggleUnitPicker('comp-unit-drop-${rowId}')">
+                                    <input type="text" value="${escapeHtml(sizeUnit)}" readonly class="comp-sizeUnit w-full px-1.5 py-1.5 text-xs font-bold text-center bg-slate-50 border border-slate-300 rounded-lg cursor-pointer hover:border-blue-500 transition">
+                                    <span class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] pointer-events-none"><i class="fa-solid fa-chevron-down"></i></span>
+                                </div>
+                                <div id="comp-unit-drop-${rowId}" class="unit-picker-dropdown absolute left-0 top-full mt-1 w-44 bg-white border border-slate-300 rounded-xl shadow-2xl z-[9999] hidden p-2 grid grid-cols-3 gap-1">
+                                    <button type="button" onclick="event.stopPropagation(); selectUnit('comp-unit-drop-${rowId}', 'ml')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">ml</button>
+                                    <button type="button" onclick="event.stopPropagation(); selectUnit('comp-unit-drop-${rowId}', 'g')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">g</button>
+                                    <button type="button" onclick="event.stopPropagation(); selectUnit('comp-unit-drop-${rowId}', 'L')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">L</button>
+                                    <button type="button" onclick="event.stopPropagation(); selectUnit('comp-unit-drop-${rowId}', 'kg')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">kg</button>
+                                    <button type="button" onclick="event.stopPropagation(); selectUnit('comp-unit-drop-${rowId}', 'oz')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">oz</button>
+                                    <button type="button" onclick="event.stopPropagation(); selectUnit('comp-unit-drop-${rowId}', 'cm')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">cm</button>
+                                    <button type="button" onclick="event.stopPropagation(); selectUnit('comp-unit-drop-${rowId}', 'mm')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">mm</button>
+                                    <button type="button" onclick="event.stopPropagation(); selectUnit('comp-unit-drop-${rowId}', '매')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">매</button>
+                                    <button type="button" onclick="event.stopPropagation(); selectUnit('comp-unit-drop-${rowId}', '개')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">개</button>
+                                    <button type="button" onclick="event.stopPropagation(); selectUnit('comp-unit-drop-${rowId}', '포')" class="px-2 py-1.5 text-xs font-bold bg-slate-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition">포</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-span-3 sm:col-span-5">
+                            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">구성 요약</label>
+                            <input type="text" placeholder="예: 50매 X 2입" value="${escapeHtml(spec)}" oninput="saveSimDraft()" class="comp-spec w-full px-2.5 py-1.5 text-xs bg-slate-50 focus:bg-white border border-slate-300 rounded-lg">
+                        </div>
+                    </div>
+                    <!-- 3줄: URL 및 단가 요약 -->
+                    <div class="flex flex-col gap-1.5 pt-2 border-t border-slate-100">
+                        <div class="flex gap-1">
+                            <input type="url" placeholder="판매페이지 URL (https://...)" value="${escapeHtml(url)}" oninput="saveSimDraft()" class="comp-url flex-1 px-2.5 py-1 text-xs bg-slate-50 focus:bg-white border border-slate-300 rounded-lg outline-none">
+                            <button type="button" onclick="openInputUrl(this)" class="px-2.5 py-1 text-xs bg-slate-100 hover:bg-indigo-50 text-indigo-600 border border-slate-300 rounded-lg font-bold shrink-0" title="새 탭에서 링크 열기">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                            </button>
+                        </div>
+                        <div class="comp-calc-summary text-[11px] text-right font-medium text-slate-600"></div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+
+            // 새로 추가된 참고업체인 경우 제품명 입력창에 자동 포커스
+            if (isExpanded && compData === null) {
+                const brandInput = div.querySelector('.comp-brand');
+                if (brandInput) setTimeout(() => brandInput.focus(), 50);
+            }
+
+            if (context === 'sim') calculateSim('salePrice');
+            else calculateEditModal('salePrice');
+        }
+
+        function updateCompetitorRowsComparison(containerId, ourPerItemPrice) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            const rows = container.querySelectorAll('.comp-row-item');
+
+            rows.forEach(row => {
+                const price = parseNum(row.querySelector('.comp-price')?.value || 0);
+                const qty = parseNum(row.querySelector('.comp-qty')?.value || 1);
+                const sizeVal = row.querySelector('.comp-sizeVal')?.value || '';
+                const sizeUnit = row.querySelector('.comp-sizeUnit')?.value || '';
+                const summaryEl = row.querySelector('.comp-calc-summary');
+                const headerBadgeEl = row.querySelector('.comp-header-diff-badge');
+                if (!summaryEl) return;
+
+                const vatInfo = getVatBreakdown(price);
+                const unitAnalysis = getUnitPriceAnalysis(price, qty, sizeVal, sizeUnit);
+                const diffPerItem = unitAnalysis.perItemInc - ourPerItemPrice;
+
+                let diffHtml = '';
+                let headerBadgeHtml = '';
+                if (diffPerItem === 0) {
+                    diffHtml = `<span class="text-slate-500 font-bold">(개당 단가 동일)</span>`;
+                    headerBadgeHtml = `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 font-bold">동일</span>`;
+                } else if (diffPerItem > 0) {
+                    diffHtml = `<span class="text-emerald-600 font-extrabold">(개당 ${formatComma(diffPerItem)}원 저렴)</span>`;
+                    headerBadgeHtml = `<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold">개당 ${formatComma(diffPerItem)}원 저렴</span>`;
+                } else {
+                    diffHtml = `<span class="text-rose-600 font-extrabold">(개당 ${formatComma(Math.abs(diffPerItem))}원 비쌈)</span>`;
+                    headerBadgeHtml = `<span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold">개당 ${formatComma(Math.abs(diffPerItem))}원 비쌈</span>`;
+                }
+
+                if (headerBadgeEl) headerBadgeEl.innerHTML = headerBadgeHtml;
+                summaryEl.innerHTML = `VAT별도 ${formatComma(vatInfo.supply)}원 · <strong>개당 ${formatComma(unitAnalysis.perItemInc)}원</strong> ${unitAnalysis.unitLabel ? `(${unitAnalysis.unitLabel})` : ''} ${diffHtml}`;
+            });
+        }
+
+        function collectCompetitorsFromContainer(containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return [];
+            const rows = container.querySelectorAll('.comp-row-item');
+            const list = [];
+
+            rows.forEach((row, idx) => {
+                const brand = row.querySelector('.comp-brand')?.value.trim() || '';
+                const price = parseNum(row.querySelector('.comp-price')?.value || 0);
+                const qty = Math.max(1, parseNum(row.querySelector('.comp-qty')?.value || 1));
+                const sizeVal = parseNum(row.querySelector('.comp-sizeVal')?.value || 0);
+                const sizeUnit = row.querySelector('.comp-sizeUnit')?.value.trim() || '';
+                const spec = row.querySelector('.comp-spec')?.value.trim() || '';
+                const url = row.querySelector('.comp-url')?.value.trim() || '';
+
+                if (brand || price > 0 || spec || url) {
+                    list.push({
+                        id: 'comp-' + Date.now() + '-' + idx,
+                        brand: brand || `참고업체 ${idx + 1}`,
+                        price,
+                        qty,
+                        sizeVal: sizeVal || '',
+                        sizeUnit,
+                        spec,
+                        url
+                    });
+                }
+            });
+            return list;
+        }
+
+        function saveNewProductFromSim() {
+            const nameInput = document.getElementById('sim_name');
+            const name = nameInput ? nameInput.value.trim() : '';
+            if (!name) { showToast('분석할 제품명을 입력해주세요.', 'error'); return; }
+
+            const calc = calculateSim('salePrice');
+            if (!calc) return;
+
+            const newProd = {
+                id: 'prod-' + Date.now(),
+                name,
+                category: document.getElementById('sim_category')?.value || '미분류',
+                qty: Math.max(1, parseNum(document.getElementById('sim_qty')?.value) || 1),
+                sizeVal: parseNum(document.getElementById('sim_sizeVal')?.value) || '',
+                sizeUnit: document.getElementById('sim_sizeUnit')?.value.trim() || '',
+                composition: document.getElementById('sim_composition')?.value.trim() || '',
+                coupangSalePrice: calc.salePrice,
+                coupangMarginRate: calc.coupangMarginRate,
+                coupangSupplyPrice: calc.coupangSupplyPrice,
+                ourMarginRate: calc.ourMarginRate,
+                ourPurchaseCost: calc.ourPurchaseCost,
+                extraCost: 0,
+                coupangMarginAmt: calc.coupangMarginAmt,
+                ourMarginAmt: calc.ourMarginAmt,
+                memo: document.getElementById('sim_memo')?.value.trim() || '',
+                reviewDate: document.getElementById('sim_reviewDate')?.value || new Date().toISOString().slice(0, 10),
+                competitors: collectCompetitorsFromContainer('sim_compListContainer'),
+                createdAt: Date.now()
+            };
+
+            products.unshift(newProd);
+            saveProductsToStorage();
+            sessionStorage.removeItem(STORAGE_KEY_SIM_DRAFT);
+            updateNavCount();
+            resetSimForm(true);
+            switchMainTab('list');
+            showToast(`'${name}' 제품이 리스트에 등록되었습니다.`, 'success');
+        }
+
+        function resetSimForm(clearDraft = false) {
+            if (clearDraft) {
+                sessionStorage.removeItem(STORAGE_KEY_SIM_DRAFT);
+            }
+            const catSelect = document.getElementById('sim_category');
+            if (catSelect && categories.some(c => c.name === '주방/베이킹')) {
+                catSelect.value = '주방/베이킹';
+            }
+            document.getElementById('sim_name').value = '에어프라이어 종이호일';
+            document.getElementById('sim_qty').value = '1';
+            document.getElementById('sim_sizeVal').value = '50';
+            document.getElementById('sim_sizeUnit').value = '매';
+            document.getElementById('sim_composition').value = '50매 X 2입';
+            document.getElementById('sim_coupangSalePrice').value = '10,000';
+            document.getElementById('sim_coupangMarginRate').value = '40';
+            document.getElementById('sim_ourMarginRate').value = '25';
+            document.getElementById('sim_memo').value = '';
+            document.getElementById('sim_reviewDate').value = new Date().toISOString().slice(0, 10);
+
+            document.getElementById('sim_compListContainer').innerHTML = '';
+            calculateSim('salePrice');
+        }
+
+        function updateNavCount() {
+            document.getElementById('navProductCountBadge').textContent = products.length;
+            renderCategoryFilterPills();
+        }
+
+        function toggleCompetitorAccordion(prodId) {
+            if (expandedCompProductIds.has(prodId)) expandedCompProductIds.delete(prodId);
+            else expandedCompProductIds.add(prodId);
+            renderProductList();
+        }
+
+        function sortProductList(col) {
+            if (currentSort.col === col) {
+                currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.col = col;
+                currentSort.dir = col.includes('Rate') || col === 'createdAt' || col === 'compCount' ? 'desc' : 'asc';
+            }
+            renderProductList();
+        }
+
+        function renderProductList() {
+            updateNavCount();
+            const tbody = document.getElementById('productTableBody');
+            const query = (document.getElementById('listSearchInput')?.value || '').trim().toLowerCase();
+
+            let filtered = products.filter(p => {
+                const catMatch = activeCategoryFilter === '전체' || (p.category || '미분류') === activeCategoryFilter;
+                if (!catMatch) return false;
+                if (!query) return true;
+                return p.name.toLowerCase().includes(query) || (p.composition || '').toLowerCase().includes(query) || (p.memo || '').toLowerCase().includes(query);
+            });
+
+            filtered.sort((a, b) => {
+                let valA, valB;
+                switch (currentSort.col) {
+                    case 'category': valA = a.category || ''; valB = b.category || ''; break;
+                    case 'reviewDate': valA = a.reviewDate || ''; valB = b.reviewDate || ''; break;
+                    case 'name': valA = a.name.toLowerCase(); valB = b.name.toLowerCase(); break;
+                    case 'ourPurchaseCost': valA = a.ourPurchaseCost; valB = b.ourPurchaseCost; break;
+                    case 'ourMarginRate': valA = a.ourMarginRate; valB = b.ourMarginRate; break;
+                    case 'coupangSupplyPrice': valA = a.coupangSupplyPrice; valB = b.coupangSupplyPrice; break;
+                    case 'coupangMarginRate': valA = a.coupangMarginRate; valB = b.coupangMarginRate; break;
+                    case 'coupangSalePrice': valA = a.coupangSalePrice; valB = b.coupangSalePrice; break;
+                    case 'unitPrice': valA = a.coupangSalePrice / Math.max(1, a.qty || 1); valB = b.coupangSalePrice / Math.max(1, b.qty || 1); break;
+                    case 'compCount': valA = (a.competitors || []).length; valB = (b.competitors || []).length; break;
+                    case 'competitiveness': valA = getPriceCompetitivenessInfo(a).diffPercent; valB = getPriceCompetitivenessInfo(b).diffPercent; break;
+                    default: valA = a.createdAt; valB = b.createdAt; break;
+                }
+                if (valA < valB) return currentSort.dir === 'asc' ? -1 : 1;
+                if (valA > valB) return currentSort.dir === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            document.querySelectorAll('.sort-icon').forEach(icon => {
+                icon.className = 'fa-solid text-[10px] sort-icon ml-1 transition-colors';
+                if (icon.dataset.col === currentSort.col) {
+                    icon.classList.add(currentSort.dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down', 'text-blue-600');
+                } else {
+                    icon.classList.add('fa-sort', 'text-slate-400');
+                }
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="13" class="py-12 text-center text-slate-400"><i class="fa-solid fa-box-open text-2xl mb-2 block"></i>조건에 맞는 등록 제품이 없습니다.</td></tr>`;
+                updateSelectedCountUI();
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(prod => {
+                const isChecked = selectedProductIds.has(prod.id) ? 'checked' : '';
+                const isExpanded = expandedCompProductIds.has(prod.id);
+                const vatCost = getVatBreakdown(prod.ourPurchaseCost);
+                const vatOurMargin = getVatBreakdown(prod.ourMarginAmt);
+                const vatSupply = getVatBreakdown(prod.coupangSupplyPrice);
+                const vatCoupangMargin = getVatBreakdown(prod.coupangMarginAmt);
+                const vatSale = getVatBreakdown(prod.coupangSalePrice);
+                const unitInfo = getUnitPriceAnalysis(prod.coupangSalePrice, prod.qty, prod.sizeVal, prod.sizeUnit);
+                const compBadgeInfo = getPriceCompetitivenessInfo(prod);
+                const comps = prod.competitors || [];
+                const reviewDateStr = prod.reviewDate || new Date(prod.createdAt).toISOString().slice(0, 10);
+
+                const compToggleBtn = comps.length > 0
+                    ? `<button onclick="toggleCompetitorAccordion('${prod.id}')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition inline-flex items-center gap-1 ${isExpanded ? 'bg-indigo-600 text-white' : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'}"><span>참고업체 ${comps.length}곳</span><i class="fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-[9px]"></i></button>`
+                    : `<span class="text-[11px] text-slate-400">없음</span>`;
+
+                // UX 개선 2: 미니 바 그래프 시각화가 포함된 아코디언 비교 카드
+                const maxPerItem = comps.length > 0 ? Math.max(unitInfo.perItemInc, ...comps.map(c => Math.round((c.price || 0) / Math.max(1, c.qty || 1)))) : unitInfo.perItemInc;
+
+                const accordionRowHtml = (comps.length > 0 && isExpanded) ? `
+                    <tr class="bg-slate-50 border-b border-slate-200">
+                        <td colspan="3" class="py-3 px-4 text-right align-top">
+                            <span class="text-[11px] font-extrabold text-indigo-700 block"><i class="fa-solid fa-scale-balanced"></i> 참고 업체 비교</span>
+                            <span class="text-[10px] text-slate-400">당사 개당 ${formatComma(unitInfo.perItemInc)}원 기준</span>
+                        </td>
+                        <td colspan="10" class="py-3 px-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                                ${comps.map((c, cIdx) => {
+                                    const cUnit = getUnitPriceAnalysis(c.price, c.qty, c.sizeVal, c.sizeUnit);
+                                    const diffPerItem = cUnit.perItemInc - unitInfo.perItemInc;
+                                    const ourBarPct = maxPerItem > 0 ? Math.max(12, Math.round((unitInfo.perItemInc / maxPerItem) * 100)) : 50;
+                                    const compBarPct = maxPerItem > 0 ? Math.max(12, Math.round((cUnit.perItemInc / maxPerItem) * 100)) : 50;
+                                    const diffBadge = diffPerItem === 0 ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-bold">개당 단가 동일</span>` : (diffPerItem > 0 ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">개당 ${formatComma(diffPerItem)}원 저렴</span>` : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-bold">개당 ${formatComma(Math.abs(diffPerItem))}원 비쌈</span>`);
+                                    const safeUrl = c.url ? (/^https?:\/\//i.test(c.url) ? c.url : 'https://' + c.url) : '';
+                                    return `
+                                        <div class="p-3 rounded-xl bg-white border border-slate-200 shadow-2xs flex flex-col justify-between gap-1.5">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <span class="font-extrabold text-slate-800 text-xs truncate"><span class="text-indigo-600 mr-1">${cIdx + 1}.</span>${escapeHtml(c.brand)}</span>
+                                                ${safeUrl ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="text-[10px] font-bold text-indigo-600 hover:underline shrink-0">링크 <i class="fa-solid fa-arrow-up-right-from-square text-[8px]"></i></a>` : ''}
+                                            </div>
+                                            <div class="text-[11px] text-slate-600">
+                                                판매가 <strong>${formatComma(c.price)}원</strong> · <strong class="text-indigo-700">개당 ${formatComma(cUnit.perItemInc)}원</strong>
+                                            </div>
+                                            <!-- 미니 단가 비교 바 차트 -->
+                                            <div class="space-y-1 py-1">
+                                                <div class="flex items-center gap-1.5 text-[10px]">
+                                                    <span class="w-9 text-blue-700 font-bold shrink-0">잘넷</span>
+                                                    <div class="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
+                                                        <div class="bg-blue-600 h-full rounded-full" style="width: ${ourBarPct}%"></div>
+                                                    </div>
+                                                    <span class="w-14 text-right font-bold text-slate-700">${formatComma(unitInfo.perItemInc)}원</span>
+                                                </div>
+                                                <div class="flex items-center gap-1.5 text-[10px]">
+                                                    <span class="w-9 text-slate-500 font-semibold shrink-0">참고사</span>
+                                                    <div class="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
+                                                        <div class="${diffPerItem >= 0 ? 'bg-slate-400' : 'bg-rose-500'} h-full rounded-full" style="width: ${compBarPct}%"></div>
+                                                    </div>
+                                                    <span class="w-14 text-right font-semibold text-slate-500">${formatComma(cUnit.perItemInc)}원</span>
+                                                </div>
+                                            </div>
+                                            <div class="flex items-center justify-between pt-1 border-t border-slate-100">
+                                                <span class="text-[10px] text-slate-500 truncate">${escapeHtml(cUnit.specSummary)}</span>
+                                                ${diffBadge}
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </td>
+                    </tr>
+                ` : '';
+
+                return `
+                    <tr class="bg-white hover:bg-slate-50 transition whitespace-nowrap align-middle group">
+                        <td class="py-3 px-3 text-center sticky left-0 z-10 bg-white group-hover:bg-slate-50"><input type="checkbox" ${isChecked} onchange="toggleSelectProduct('${prod.id}', this.checked)" class="w-4 h-4 rounded accent-blue-600 cursor-pointer"></td>
+                        <td class="py-3 px-3">${renderCategoryBadgeHtml(prod.category)}</td>
+                        <td class="py-3 px-3 text-slate-600 font-semibold text-xs">${escapeHtml(reviewDateStr)}</td>
+                        <td class="py-3 px-3 max-w-[260px] sticky left-10 z-10 bg-white group-hover:bg-slate-50 sticky-col-shadow">
+                            <button type="button" onclick="openProductDetailModal('${prod.id}')" class="text-left group/btn focus:outline-none block w-full">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-extrabold text-slate-900 group-hover/btn:text-blue-600 group-hover/btn:underline text-xs sm:text-sm truncate transition">${escapeHtml(prod.name)}</span>
+                                    ${prod.memo ? `<span class="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[10px] font-bold"><i class="fa-regular fa-note-sticky"></i>메모</span>` : ''}
+                                </div>
+                                <div class="text-[11px] text-slate-500 truncate mt-1">${escapeHtml(unitInfo.specSummary)}${prod.composition ? ` · ${escapeHtml(prod.composition)}` : ''}</div>
+                            </button>
+                        </td>
+                        <td class="py-3 px-3 text-center">${compBadgeInfo.badgeHtml}</td>
+                        <td class="py-3 px-3 text-right bg-blue-50/20 border-l border-slate-100">
+                            <div class="font-extrabold text-slate-900 text-xs sm:text-sm">${formatComma(prod.ourPurchaseCost)}원</div>
+                            <div class="text-[11px] text-slate-500 vat-sub-info">별도 ${formatComma(vatCost.supply)}원</div>
+                        </td>
+                        <td class="py-3 px-3 text-right bg-blue-50/20 border-r border-slate-100">
+                            <div class="font-extrabold text-blue-700 text-xs sm:text-sm">${prod.ourMarginRate}% <span class="text-slate-800 font-bold text-xs">(${formatComma(prod.ourMarginAmt)}원)</span></div>
+                            <div class="text-[11px] text-slate-500 vat-sub-info">별도 ${formatComma(vatOurMargin.supply)}원</div>
+                        </td>
+                        <td class="py-3 px-3 text-right bg-amber-50/20">
+                            <div class="font-extrabold text-slate-900 text-xs sm:text-sm">${formatComma(prod.coupangSupplyPrice)}원</div>
+                            <div class="text-[11px] text-slate-500 vat-sub-info">별도 ${formatComma(vatSupply.supply)}원</div>
+                        </td>
+                        <td class="py-3 px-3 text-right bg-amber-50/20">
+                            <div class="font-extrabold text-amber-800 text-xs sm:text-sm">${prod.coupangMarginRate}% <span class="text-slate-800 font-bold text-xs">(${formatComma(prod.coupangMarginAmt)}원)</span></div>
+                            <div class="text-[11px] text-slate-500 vat-sub-info">별도 ${formatComma(vatCoupangMargin.supply)}원</div>
+                        </td>
+                        <td class="py-3 px-3 text-right bg-amber-50/20 border-r border-slate-100">
+                            <div class="font-extrabold text-slate-900 text-xs sm:text-sm">${formatComma(prod.coupangSalePrice)}원</div>
+                            <div class="text-[11px] text-slate-500 vat-sub-info">별도 ${formatComma(vatSale.supply)}원</div>
+                        </td>
+                        <td class="py-3 px-3 text-right bg-indigo-50/20">
+                            <div class="font-extrabold text-indigo-950 text-xs sm:text-sm">${formatComma(unitInfo.perItemInc)}원/개</div>
+                            <div class="text-[11px] text-slate-500 vat-sub-info">별도 ${formatComma(unitInfo.perItemExc)}원${unitInfo.unitLabel ? ` · <span class="text-indigo-700 font-semibold">${unitInfo.unitLabel}</span>` : ''}</div>
+                        </td>
+                        <td class="py-3 px-3 text-center">${compToggleBtn}</td>
+                        <td class="py-3 px-3 text-center">
+                            <div class="inline-flex items-center gap-1">
+                                <button onclick="openEditProductModal('${prod.id}')" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-blue-600 hover:bg-blue-700 text-white transition">수정</button>
+                                <button onclick="duplicateProduct('${prod.id}')" class="px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition">복제</button>
+                                <button onclick="deleteProduct('${prod.id}')" class="px-2 py-1 rounded-lg text-[11px] font-bold bg-red-50 hover:bg-red-100 text-red-600 transition">삭제</button>
+                            </div>
+                        </td>
+                    </tr>
+                    ${accordionRowHtml}
+                `;
+            }).join('');
+            updateSelectedCountUI();
+        }
+
+        function openProductDetailModal(prodId) {
+            const prod = products.find(p => p.id === prodId);
+            if (!prod) return;
+
+            detailOriginalProductSnapshot = JSON.parse(JSON.stringify(prod));
+            document.getElementById('detail_activeProdId').value = prod.id;
+
+            const unitInfo = getUnitPriceAnalysis(prod.coupangSalePrice, prod.qty, prod.sizeVal, prod.sizeUnit);
+            const compInfo = getPriceCompetitivenessInfo(prod);
+
+            document.getElementById('detail_categoryBadge').innerHTML = renderCategoryBadgeHtml(prod.category);
+            document.getElementById('detail_productName').textContent = prod.name;
+            document.getElementById('detail_compBadge').innerHTML = compInfo.badgeHtml;
+
+            document.getElementById('detail_editBtn').onclick = () => {
+                closeProductDetailModal();
+                openEditProductModal(prod.id);
+            };
+
+            document.getElementById('detail_saveBtn').classList.add('hidden');
+            document.getElementById('detail_specText').textContent = `${unitInfo.specSummary}${prod.composition ? ` · ${prod.composition}` : ''}`;
+
+            document.getElementById('detail_input_ourCost').value = formatComma(prod.ourPurchaseCost);
+            document.getElementById('detail_input_ourMarginRate').value = prod.ourMarginRate;
+            document.getElementById('detail_input_supplyPrice').value = formatComma(prod.coupangSupplyPrice);
+            document.getElementById('detail_input_coupangMarginRate').value = prod.coupangMarginRate;
+            document.getElementById('detail_input_salePrice').value = formatComma(prod.coupangSalePrice);
+
+            updateDetailModalDisplayValues(prod);
+
+            document.getElementById('detail_memoBox').textContent = prod.memo && prod.memo.trim() ? prod.memo : '등록된 특이사항 및 이력 메모가 없습니다.';
+
+            const comps = prod.competitors || [];
+            document.getElementById('detail_compSummaryTxt').textContent = `총 ${comps.length}곳 · 참고업체 평균 개당 단가: ${formatComma(compInfo.avgCompPerItem)}원`;
+            renderDetailCompetitorTable(comps, unitInfo);
+
+            const modal = document.getElementById('productDetailModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        window.sortDetailCompTable = function(col) {
+            if (currentCompSort.col === col) currentCompSort.dir = currentCompSort.dir === 'asc' ? 'desc' : 'asc';
+            else { currentCompSort.col = col; currentCompSort.dir = col === 'brand' ? 'asc' : 'desc'; }
+            const prodId = document.getElementById('detail_activeProdId')?.value;
+            const prod = products.find(p => p.id === prodId);
+            if (prod) renderDetailCompetitorTable(prod.competitors || [], getUnitPriceAnalysis(prod.coupangSalePrice, prod.qty, prod.sizeVal, prod.sizeUnit));
+        };
+
+        function renderDetailCompetitorTable(comps, unitInfo) {
+            const compContainer = document.getElementById('detail_compListContainer');
+            if (!compContainer) return;
+
+            let sortedComps = [...comps];
+            sortedComps.sort((a, b) => {
+                let valA, valB;
+                switch (currentCompSort.col) {
+                    case 'brand': valA = (a.brand || '').toLowerCase(); valB = (b.brand || '').toLowerCase(); break;
+                    case 'price': valA = a.price || 0; valB = b.price || 0; break;
+                    case 'unitPrice': valA = (a.price || 0) / Math.max(1, a.qty || 1); valB = (b.price || 0) / Math.max(1, b.qty || 1); break;
+                    case 'diff': valA = ((a.price || 0) / Math.max(1, a.qty || 1)) - unitInfo.perItemInc; valB = ((b.price || 0) / Math.max(1, b.qty || 1)) - unitInfo.perItemInc; break;
+                    default: valA = a.price || 0; valB = b.price || 0; break;
+                }
+                return currentCompSort.dir === 'asc' ? (valA < valB ? -1 : 1) : (valA > valB ? -1 : 1);
+            });
+
+            const thClass = "py-2.5 px-3.5 cursor-pointer hover:bg-slate-200 transition group select-none";
+            const iconHtml = (col) => currentCompSort.col === col ? `<i class="fa-solid ${currentCompSort.dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down'} text-[10px] text-blue-600 ml-1"></i>` : `<i class="fa-solid fa-sort text-[10px] text-slate-400 ml-1"></i>`;
+
+            const maxPerItem = sortedComps.length > 0 ? Math.max(unitInfo.perItemInc, ...sortedComps.map(c => Math.round((c.price || 0) / Math.max(1, c.qty || 1)))) : unitInfo.perItemInc;
+
+            compContainer.innerHTML = `
+                <table class="w-full text-left border-collapse text-xs whitespace-nowrap min-w-[1100px]">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-700 border-b border-slate-200 font-extrabold">
+                            <th class="py-2.5 px-3.5 text-center w-12">순번</th>
+                            <th class="${thClass}" onclick="sortDetailCompTable('brand')">제품명 ${iconHtml('brand')}</th>
+                            <th class="py-2.5 px-3.5">입수량</th>
+                            <th class="py-2.5 px-3.5">사이즈/단위</th>
+                            <th class="py-2.5 px-3.5">상세 구성 설명</th>
+                            <th class="${thClass} text-right" onclick="sortDetailCompTable('price')">판매가 ${iconHtml('price')}</th>
+                            <th class="${thClass} text-right" onclick="sortDetailCompTable('unitPrice')">개당 판매가 ${iconHtml('unitPrice')}</th>
+                            <th class="${thClass} text-center" onclick="sortDetailCompTable('diff')">단가 비교 및 그래프 ${iconHtml('diff')}</th>
+                            <th class="py-2.5 px-3.5 text-center">판매페이지</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">
+                        ${sortedComps.map((c, idx) => {
+                            const cVat = getVatBreakdown(c.price);
+                            const cUnit = getUnitPriceAnalysis(c.price, c.qty, c.sizeVal, c.sizeUnit);
+                            const diffPerItem = cUnit.perItemInc - unitInfo.perItemInc;
+                            const ourBarPct = maxPerItem > 0 ? Math.max(12, Math.round((unitInfo.perItemInc / maxPerItem) * 100)) : 50;
+                            const compBarPct = maxPerItem > 0 ? Math.max(12, Math.round((cUnit.perItemInc / maxPerItem) * 100)) : 50;
+                            const diffBadge = diffPerItem === 0 ? `<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold text-[11px]">개당 단가 동일</span>` : (diffPerItem > 0 ? `<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-extrabold text-[11px] border border-emerald-200">개당 ${formatComma(diffPerItem)}원 저렴</span>` : `<span class="px-2 py-0.5 rounded bg-rose-50 text-rose-700 font-extrabold text-[11px] border border-rose-200">개당 ${formatComma(Math.abs(diffPerItem))}원 비쌈</span>`);
+                            const safeUrl = c.url ? (/^https?:\/\//i.test(c.url) ? c.url : 'https://' + c.url) : '';
+                            return `
+                                <tr class="hover:bg-slate-50 align-middle">
+                                    <td class="py-2.5 px-3.5 text-center font-extrabold text-slate-600">${idx + 1}</td>
+                                    <td class="py-2.5 px-3.5 font-extrabold text-slate-900">${escapeHtml(c.brand)}</td>
+                                    <td class="py-2.5 px-3.5 font-bold text-blue-700">${cUnit.qty}개</td>
+                                    <td class="py-2.5 px-3.5 text-slate-700">${c.sizeVal ? `${escapeHtml(c.sizeVal)}${escapeHtml(c.sizeUnit || '')}` : '-'}</td>
+                                    <td class="py-2.5 px-3.5 text-slate-600">${escapeHtml(c.spec || '-')}</td>
+                                    <td class="py-2.5 px-3.5 text-right"><span class="font-extrabold text-slate-900">${formatComma(c.price)}원</span> <span class="text-[11px] text-slate-500">(별도 ${formatComma(cVat.supply)}원)</span></td>
+                                    <td class="py-2.5 px-3.5 text-right"><span class="font-extrabold text-indigo-700">${formatComma(cUnit.perItemInc)}원/개</span></td>
+                                    <td class="py-2.5 px-3.5">
+                                        <div class="flex flex-col items-center gap-1 min-w-[170px]">
+                                            ${diffBadge}
+                                            <div class="w-full flex items-center gap-1 text-[9px] text-slate-500">
+                                                <span class="w-6 text-blue-600 font-bold">잘넷</span>
+                                                <div class="flex-1 bg-slate-100 h-1.5 rounded-full overflow-hidden"><div class="bg-blue-600 h-full" style="width:${ourBarPct}%"></div></div>
+                                                <span class="w-6 text-slate-500 font-bold ml-1">타사</span>
+                                                <div class="flex-1 bg-slate-100 h-1.5 rounded-full overflow-hidden"><div class="${diffPerItem >= 0 ? 'bg-slate-400' : 'bg-rose-500'} h-full" style="width:${compBarPct}%"></div></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-2.5 px-3.5 text-center">${safeUrl ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold">판매페이지</a>` : '-'}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function calculateDetailModalSim(changedField = 'salePrice') {
+            const salePrice = parseNum(document.getElementById('detail_input_salePrice')?.value);
+            const prodId = document.getElementById('detail_activeProdId')?.value;
+            const prod = products.find(p => p.id === prodId);
+            if (!prod) return;
+
+            let coupangMarginRate = parseNum(document.getElementById('detail_input_coupangMarginRate')?.value);
+            let coupangSupplyPrice = parseNum(document.getElementById('detail_input_supplyPrice')?.value);
+            let ourMarginRate = parseNum(document.getElementById('detail_input_ourMarginRate')?.value);
+            let ourPurchaseCost = parseNum(document.getElementById('detail_input_ourCost')?.value);
+
+            if (changedField === 'salePrice' || changedField === 'coupangMarginRate') {
+                coupangSupplyPrice = Math.round(salePrice * (1 - coupangMarginRate / 100));
+                document.getElementById('detail_input_supplyPrice').value = formatComma(coupangSupplyPrice);
+                ourPurchaseCost = Math.round(coupangSupplyPrice * (1 - ourMarginRate / 100));
+                document.getElementById('detail_input_ourCost').value = formatComma(ourPurchaseCost);
+            } else if (changedField === 'supplyPrice') {
+                coupangMarginRate = salePrice > 0 ? ((salePrice - coupangSupplyPrice) / salePrice) * 100 : 0;
+                document.getElementById('detail_input_coupangMarginRate').value = coupangMarginRate.toFixed(1);
+                ourPurchaseCost = Math.round(coupangSupplyPrice * (1 - ourMarginRate / 100));
+                document.getElementById('detail_input_ourCost').value = formatComma(ourPurchaseCost);
+            } else if (changedField === 'ourMarginRate') {
+                ourPurchaseCost = Math.round(coupangSupplyPrice * (1 - ourMarginRate / 100));
+                document.getElementById('detail_input_ourCost').value = formatComma(ourPurchaseCost);
+            } else if (changedField === 'ourCost') {
+                ourMarginRate = coupangSupplyPrice > 0 ? ((coupangSupplyPrice - ourPurchaseCost) / coupangSupplyPrice) * 100 : 0;
+                document.getElementById('detail_input_ourMarginRate').value = ourMarginRate.toFixed(1);
+            }
+
+            const coupangMarginAmt = salePrice - coupangSupplyPrice;
+            const ourMarginAmt = coupangSupplyPrice - ourPurchaseCost;
+
+            updateDetailModalDisplayValues({ ...prod, coupangSalePrice: salePrice, coupangMarginRate: Number(coupangMarginRate.toFixed(1)), coupangSupplyPrice, ourMarginRate: Number(ourMarginRate.toFixed(1)), ourPurchaseCost, coupangMarginAmt, ourMarginAmt });
+            document.getElementById('detail_saveBtn').classList.remove('hidden');
+        }
+
+        function updateDetailModalDisplayValues(prod) {
+            const vatCost = getVatBreakdown(prod.ourPurchaseCost);
+            const vatOurMargin = getVatBreakdown(prod.ourMarginAmt);
+            const vatSupply = getVatBreakdown(prod.coupangSupplyPrice);
+            const vatCoupangMargin = getVatBreakdown(prod.coupangMarginAmt);
+            const vatSale = getVatBreakdown(prod.coupangSalePrice);
+            const unitInfo = getUnitPriceAnalysis(prod.coupangSalePrice, prod.qty, prod.sizeVal, prod.sizeUnit);
+
+            document.getElementById('detail_oneRowTableBody').innerHTML = `
+                <tr class="align-middle">
+                    <td class="py-3 px-3.5 font-extrabold text-slate-900 text-sm">${escapeHtml(prod.name)}</td>
+                    <td class="py-3 px-3.5 text-slate-700 font-medium">${escapeHtml(unitInfo.specSummary)}${prod.composition ? ` · ${escapeHtml(prod.composition)}` : ''}</td>
+                    <td class="py-3 px-3.5 text-right bg-blue-50/30 border-l border-slate-200"><span class="font-extrabold text-slate-900 text-sm">${formatComma(prod.ourPurchaseCost)}원</span></td>
+                    <td class="py-3 px-3.5 text-right bg-blue-50/30 border-r border-slate-200"><span class="font-extrabold text-blue-700 text-sm">${prod.ourMarginRate}%</span> <span class="font-bold">${formatComma(prod.ourMarginAmt)}원</span></td>
+                    <td class="py-3 px-3.5 text-right bg-amber-50/30"><span class="font-extrabold text-slate-900 text-sm">${formatComma(prod.coupangSupplyPrice)}원</span></td>
+                    <td class="py-3 px-3.5 text-right bg-amber-50/30"><span class="font-extrabold text-amber-800 text-sm">${prod.coupangMarginRate}%</span> <span class="font-bold">${formatComma(prod.coupangMarginAmt)}원</span></td>
+                    <td class="py-3 px-3.5 text-right bg-amber-100/30 border-r border-slate-200"><span class="font-extrabold text-amber-950 text-sm">${formatComma(prod.coupangSalePrice)}원</span></td>
+                    <td class="py-3 px-3.5 text-right bg-indigo-50/30"><span class="font-extrabold text-indigo-950 text-sm">${formatComma(unitInfo.perItemInc)}원/개</span></td>
+                </tr>
+            `;
+
+            document.getElementById('detail_costExc').textContent = `VAT 별도: ${formatComma(vatCost.supply)}원`;
+            document.getElementById('detail_costVat').textContent = `세액: ${formatComma(vatCost.vat)}원`;
+            document.getElementById('detail_ourMarginInc').textContent = `${formatComma(prod.ourMarginAmt)}원 (VAT포함)`;
+            document.getElementById('detail_ourMarginExc').textContent = `VAT 별도: ${formatComma(vatOurMargin.supply)}원`;
+            document.getElementById('detail_supplyExc').textContent = `VAT 별도: ${formatComma(vatSupply.supply)}원`;
+            document.getElementById('detail_supplyVat').textContent = `세액: ${formatComma(vatSupply.vat)}원`;
+            document.getElementById('detail_coupangMarginInc').textContent = `${formatComma(prod.coupangMarginAmt)}원 (VAT포함)`;
+            document.getElementById('detail_coupangMarginExc').textContent = `VAT 별도: ${formatComma(vatCoupangMargin.supply)}원`;
+            document.getElementById('detail_saleExc').textContent = `VAT 별도: ${formatComma(vatSale.supply)}원`;
+            document.getElementById('detail_saleVat').textContent = `세액: ${formatComma(vatSale.vat)}원`;
+            document.getElementById('detail_perItemInc').textContent = `${formatComma(unitInfo.perItemInc)}원`;
+            document.getElementById('detail_perItemExc').textContent = `VAT 별도: ${formatComma(unitInfo.perItemExc)}원`;
+            document.getElementById('detail_perUnitLabel').textContent = unitInfo.unitLabel || `입수량 ${unitInfo.qty}개 기준`;
+        }
+
+        function resetDetailModalToSaved() {
+            if (!detailOriginalProductSnapshot) return;
+            openProductDetailModal(detailOriginalProductSnapshot.id);
+        }
+
+        function saveDetailModalSimChanges() {
+            const prodId = document.getElementById('detail_activeProdId')?.value;
+            const idx = products.findIndex(p => p.id === prodId);
+            if (idx === -1) return;
+
+            const salePrice = parseNum(document.getElementById('detail_input_salePrice')?.value);
+            const coupangMarginRate = parseNum(document.getElementById('detail_input_coupangMarginRate')?.value);
+            const coupangSupplyPrice = parseNum(document.getElementById('detail_input_supplyPrice')?.value);
+            const ourMarginRate = parseNum(document.getElementById('detail_input_ourMarginRate')?.value);
+            const ourPurchaseCost = parseNum(document.getElementById('detail_input_ourCost')?.value);
+
+            products[idx] = {
+                ...products[idx],
+                coupangSalePrice: salePrice,
+                coupangMarginRate: Number(coupangMarginRate.toFixed(1)),
+                coupangSupplyPrice,
+                ourMarginRate: Number(ourMarginRate.toFixed(1)),
+                ourPurchaseCost,
+                coupangMarginAmt: salePrice - coupangSupplyPrice,
+                ourMarginAmt: coupangSupplyPrice - ourPurchaseCost
+            };
+
+            saveProductsToStorage();
+            renderProductList();
+            showToast('제품 가격 및 마진 변경사항이 저장되었습니다.', 'success');
+            openProductDetailModal(prodId);
+        }
+
+        function closeProductDetailModal() {
+            document.getElementById('productDetailModal').classList.add('hidden');
+            document.getElementById('productDetailModal').classList.remove('flex');
+        }
+
+        function openRatingCriteriaModal() {
+            document.getElementById('ratingCriteriaModal').classList.remove('hidden');
+            document.getElementById('ratingCriteriaModal').classList.add('flex');
+        }
+
+        function closeRatingCriteriaModal() {
+            document.getElementById('ratingCriteriaModal').classList.add('hidden');
+            document.getElementById('ratingCriteriaModal').classList.remove('flex');
+        }
+
+        function openEditProductModal(id) {
+            const prod = products.find(p => p.id === id);
+            if (!prod) return;
+
+            populateCategoryDropdowns();
+            document.getElementById('edit_id').value = prod.id;
+            document.getElementById('edit_category').value = categories.some(c => c.name === prod.category) ? prod.category : '미분류';
+            document.getElementById('edit_name').value = prod.name;
+            document.getElementById('edit_qty').value = prod.qty || 1;
+            document.getElementById('edit_sizeVal').value = prod.sizeVal || '';
+            document.getElementById('edit_sizeUnit').value = prod.sizeUnit || '';
+            document.getElementById('edit_composition').value = prod.composition || '';
+            document.getElementById('edit_reviewDate').value = prod.reviewDate || new Date(prod.createdAt).toISOString().slice(0, 10);
+            document.getElementById('edit_coupangSalePrice').value = formatComma(prod.coupangSalePrice);
+            document.getElementById('edit_coupangMarginRate').value = prod.coupangMarginRate;
+            document.getElementById('edit_coupangSupplyPrice').value = formatComma(prod.coupangSupplyPrice);
+            document.getElementById('edit_ourMarginRate').value = prod.ourMarginRate;
+            document.getElementById('edit_ourPurchaseCost').value = formatComma(prod.ourPurchaseCost);
+            document.getElementById('edit_memo').value = prod.memo || '';
+
+            const compContainer = document.getElementById('edit_compListContainer');
+            compContainer.innerHTML = '';
+            if (prod.competitors && prod.competitors.length > 0) {
+                prod.competitors.forEach(c => addCompetitorRow('edit_compListContainer', c, 'edit', false));
+            }
+
+            calculateEditModal('salePrice');
+            document.getElementById('editProductModal').classList.remove('hidden');
+            document.getElementById('editProductModal').classList.add('flex');
+        }
+
+        function closeEditProductModal() {
+            document.getElementById('editProductModal').classList.add('hidden');
+            document.getElementById('editProductModal').classList.remove('flex');
+        }
+
+        function calculateEditModal(changedField = 'salePrice') {
+            let salePrice = parseNum(document.getElementById('edit_coupangSalePrice').value);
+            const qty = Math.max(1, parseNum(document.getElementById('edit_qty').value) || 1);
+            const sizeVal = document.getElementById('edit_sizeVal').value;
+            const sizeUnit = document.getElementById('edit_sizeUnit').value;
+
+            let coupangMarginRate = parseNum(document.getElementById('edit_coupangMarginRate').value);
+            let coupangSupplyPrice = parseNum(document.getElementById('edit_coupangSupplyPrice').value);
+            let ourMarginRate = parseNum(document.getElementById('edit_ourMarginRate').value);
+            let ourPurchaseCost = parseNum(document.getElementById('edit_ourPurchaseCost').value);
+
+            if (editCalcMode === 'forward') {
+                // 정산 모드 (매입가 ➔ 납품가 ➔ 판매가)
+                if (changedField === 'ourCost' || changedField === 'ourMarginRate') {
+                    const denomOur = 1 - (ourMarginRate / 100);
+                    coupangSupplyPrice = denomOur > 0.01 ? Math.round(ourPurchaseCost / denomOur) : ourPurchaseCost;
+                    document.getElementById('edit_coupangSupplyPrice').value = formatComma(coupangSupplyPrice);
+
+                    const denomCoupang = 1 - (coupangMarginRate / 100);
+                    salePrice = denomCoupang > 0.01 ? Math.round(coupangSupplyPrice / denomCoupang) : coupangSupplyPrice;
+                    document.getElementById('edit_coupangSalePrice').value = formatComma(salePrice);
+                } else if (changedField === 'supplyPrice') {
+                    ourMarginRate = coupangSupplyPrice > 0 ? ((coupangSupplyPrice - ourPurchaseCost) / coupangSupplyPrice) * 100 : 0;
+                    document.getElementById('edit_ourMarginRate').value = ourMarginRate.toFixed(1);
+
+                    const denomCoupang = 1 - (coupangMarginRate / 100);
+                    salePrice = denomCoupang > 0.01 ? Math.round(coupangSupplyPrice / denomCoupang) : coupangSupplyPrice;
+                    document.getElementById('edit_coupangSalePrice').value = formatComma(salePrice);
+                } else if (changedField === 'coupangMarginRate') {
+                    const denomCoupang = 1 - (coupangMarginRate / 100);
+                    salePrice = denomCoupang > 0.01 ? Math.round(coupangSupplyPrice / denomCoupang) : coupangSupplyPrice;
+                    document.getElementById('edit_coupangSalePrice').value = formatComma(salePrice);
+                } else if (changedField === 'salePrice') {
+                    coupangMarginRate = salePrice > 0 ? ((salePrice - coupangSupplyPrice) / salePrice) * 100 : 0;
+                    document.getElementById('edit_coupangMarginRate').value = coupangMarginRate.toFixed(1);
+                }
+            } else {
+                // 역산 모드 (판매가 ➔ 납품가 ➔ 매입가)
+                if (changedField === 'salePrice' || changedField === 'coupangMarginRate') {
+                    coupangSupplyPrice = Math.round(salePrice * (1 - coupangMarginRate / 100));
+                    document.getElementById('edit_coupangSupplyPrice').value = formatComma(coupangSupplyPrice);
+                    ourPurchaseCost = Math.round(coupangSupplyPrice * (1 - ourMarginRate / 100));
+                    document.getElementById('edit_ourPurchaseCost').value = formatComma(ourPurchaseCost);
+                } else if (changedField === 'supplyPrice') {
+                    coupangMarginRate = salePrice > 0 ? ((salePrice - coupangSupplyPrice) / salePrice) * 100 : 0;
+                    document.getElementById('edit_coupangMarginRate').value = coupangMarginRate.toFixed(1);
+                    ourPurchaseCost = Math.round(coupangSupplyPrice * (1 - ourMarginRate / 100));
+                    document.getElementById('edit_ourPurchaseCost').value = formatComma(ourPurchaseCost);
+                } else if (changedField === 'ourMarginRate') {
+                    ourPurchaseCost = Math.round(coupangSupplyPrice * (1 - ourMarginRate / 100));
+                    document.getElementById('edit_ourPurchaseCost').value = formatComma(ourPurchaseCost);
+                } else if (changedField === 'ourCost') {
+                    ourMarginRate = coupangSupplyPrice > 0 ? ((coupangSupplyPrice - ourPurchaseCost) / coupangSupplyPrice) * 100 : 0;
+                    document.getElementById('edit_ourMarginRate').value = ourMarginRate.toFixed(1);
+                }
+            }
+
+            const coupangMarginAmt = salePrice - coupangSupplyPrice;
+            const ourMarginAmt = coupangSupplyPrice - ourPurchaseCost;
+            const unitInfo = getUnitPriceAnalysis(salePrice, qty, sizeVal, sizeUnit);
+
+            const vatSale = getVatBreakdown(salePrice);
+            const vatSupply = getVatBreakdown(coupangSupplyPrice);
+            const vatCost = getVatBreakdown(ourPurchaseCost);
+            const vatPerItem = getVatBreakdown(unitInfo.perItemInc);
+
+            document.getElementById('edit_vatSub_sale').textContent = `VAT 별도: ${formatComma(vatSale.supply)}원 (세액 ${formatComma(vatSale.vat)}원)`;
+            document.getElementById('edit_unitPriceSub').textContent = `개당 판매가 ${formatComma(unitInfo.perItemInc)}원 (VAT 별도: ${formatComma(vatPerItem.supply)}원) ${unitInfo.unitLabel ? `· ${unitInfo.unitLabel}` : ''}`;
+            document.getElementById('edit_vatSub_supply').textContent = `VAT 별도: ${formatComma(vatSupply.supply)}원`;
+            document.getElementById('edit_vatSub_cost').textContent = `VAT 별도: ${formatComma(vatCost.supply)}원`;
+            document.getElementById('edit_marginSummaryTxt').textContent = `잘넷 마진액: ${formatComma(ourMarginAmt)}원 | 쿠팡 마진액: ${formatComma(coupangMarginAmt)}원`;
+
+            updateCompetitorRowsComparison('edit_compListContainer', unitInfo.perItemInc);
+
+            return { salePrice, coupangMarginRate: Number(coupangMarginRate.toFixed(1)), coupangSupplyPrice, ourMarginRate: Number(ourMarginRate.toFixed(1)), ourPurchaseCost, coupangMarginAmt, ourMarginAmt };
+        }
+
+        function saveEditedProduct() {
+            const id = document.getElementById('edit_id').value;
+            const name = document.getElementById('edit_name').value.trim();
+            if (!name) { showToast('제품명을 입력해주세요.', 'error'); return; }
+
+            const idx = products.findIndex(p => p.id === id);
+            if (idx === -1) return;
+
+            const calc = calculateEditModal('salePrice');
+            products[idx] = {
+                ...products[idx],
+                name,
+                category: document.getElementById('edit_category').value || '미분류',
+                qty: Math.max(1, parseNum(document.getElementById('edit_qty').value) || 1),
+                sizeVal: parseNum(document.getElementById('edit_sizeVal').value) || '',
+                sizeUnit: document.getElementById('edit_sizeUnit').value.trim(),
+                composition: document.getElementById('edit_composition').value.trim(),
+                coupangSalePrice: calc.salePrice,
+                coupangMarginRate: calc.coupangMarginRate,
+                coupangSupplyPrice: calc.coupangSupplyPrice,
+                ourMarginRate: calc.ourMarginRate,
+                ourPurchaseCost: calc.ourPurchaseCost,
+                coupangMarginAmt: calc.coupangMarginAmt,
+                ourMarginAmt: calc.ourMarginAmt,
+                memo: document.getElementById('edit_memo').value.trim(),
+                reviewDate: document.getElementById('edit_reviewDate').value,
+                competitors: collectCompetitorsFromContainer('edit_compListContainer')
+            };
+
+            saveProductsToStorage();
+            closeEditProductModal();
+            renderProductList();
+            showToast(`'${name}' 제품 정보가 수정되었습니다.`, 'success');
+        }
+
+        function duplicateProduct(id) {
+            const orig = products.find(p => p.id === id);
+            if (!orig) return;
+            const copy = JSON.parse(JSON.stringify(orig));
+            copy.id = 'prod-' + Date.now();
+            copy.name = `${orig.name} (복사본)`;
+            copy.createdAt = Date.now();
+            copy.reviewDate = new Date().toISOString().slice(0, 10);
+            products.unshift(copy);
+            saveProductsToStorage();
+            renderProductList();
+            showToast('복제되었습니다.', 'success');
+        }
+
+        function deleteProduct(id) {
+            const prod = products.find(p => p.id === id);
+            if (!prod) return;
+            openConfirmModal('제품 삭제', `'${prod.name}' 항목을 삭제하시겠습니까?`, () => {
+                products = products.filter(p => p.id !== id);
+                selectedProductIds.delete(id);
+                expandedCompProductIds.delete(id);
+                saveProductsToStorage();
+                renderProductList();
+                showToast('삭제되었습니다.', 'info');
+            });
+        }
+
+        function toggleSelectProduct(id, checked) {
+            if (checked) selectedProductIds.add(id);
+            else selectedProductIds.delete(id);
+            updateSelectedCountUI();
+        }
+
+        function toggleSelectAll(checkboxEl) {
+            products.forEach(p => {
+                if (checkboxEl.checked) selectedProductIds.add(p.id);
+                else selectedProductIds.delete(p.id);
+            });
+            renderProductList();
+        }
+
+        function updateSelectedCountUI() {
+            document.getElementById('selectedCountLabel').textContent = `선택: ${selectedProductIds.size}건`;
+        }
+
+        function deleteSelectedProducts() {
+            if (selectedProductIds.size === 0) { showToast('삭제할 제품을 먼저 선택해주세요.', 'warning'); return; }
+            openConfirmModal('선택 제품 일괄 삭제', `선택한 ${selectedProductIds.size}개의 제품을 삭제하시겠습니까?`, () => {
+                products = products.filter(p => !selectedProductIds.has(p.id));
+                selectedProductIds.clear();
+                saveProductsToStorage();
+                renderProductList();
+                showToast('삭제되었습니다.', 'info');
+            });
+        }
+
+        function exportSelectedToExcelWithFormulas() {
+            let targetList = products.filter(p => selectedProductIds.has(p.id));
+            if (targetList.length === 0) {
+                targetList = products.filter(p => activeCategoryFilter === '전체' || (p.category || '미분류') === activeCategoryFilter);
+            }
+            if (targetList.length === 0) { showToast('다운로드할 데이터가 없습니다.', 'warning'); return; }
+
+            const headers = [
+                '카테고리', '개발검토일', '제품명', '입수량', '사이즈/용량', '단위', '상세구성', '가격경쟁력',
+                '잘넷매입가(VAT포함)', '잘넷매입가(VAT별도)',
+                '잘넷마진액(VAT포함)', '잘넷마진액(VAT별도)', '잘넷마진율(%)',
+                '쿠팡납품가(VAT포함)', '쿠팡납품가(VAT별도)',
+                '쿠팡마진액(VAT포함)', '쿠팡마진액(VAT별도)', '쿠팡마진율(%)',
+                '쿠팡판매가(VAT포함)', '쿠팡판매가(VAT별도)',
+                '개당판매가(VAT포함)', '개당판매가(VAT별도)',
+                '특이사항 및 이력 메모', '참고업체 상세비교'
+            ];
+            const ws = XLSX.utils.aoa_to_sheet([headers]);
+
+            targetList.forEach((p, idx) => {
+                const r = idx + 2;
+                const qty = Math.max(1, Number(p.qty) || 1);
+                const compInfo = getPriceCompetitivenessInfo(p);
+                const compSummary = (p.competitors || []).map((c, i) => {
+                    const cPerItem = Math.round((c.price || 0) / Math.max(1, c.qty || 1));
+                    return `[${i + 1}. ${c.brand}] 판매가:${formatComma(c.price)}원(개당 ${formatComma(cPerItem)}원, 입수 ${c.qty || 1}개/${c.sizeVal || ''}${c.sizeUnit || ''})`;
+                }).join(' | ');
+
+                XLSX.utils.sheet_add_aoa(ws, [[
+                    p.category || '미분류',
+                    p.reviewDate || new Date(p.createdAt).toISOString().slice(0, 10),
+                    p.name,
+                    qty,
+                    p.sizeVal !== '' ? Number(p.sizeVal) : '',
+                    p.sizeUnit || '',
+                    p.composition || '',
+                    compInfo.label,
+                    Number(p.ourPurchaseCost) || 0,
+                    null,
+                    null,
+                    null,
+                    null,
+                    Number(p.coupangSupplyPrice) || 0,
+                    null,
+                    null,
+                    null,
+                    null,
+                    Number(p.coupangSalePrice) || 0,
+                    null,
+                    null,
+                    null,
+                    p.memo || '',
+                    compSummary
+                ]], { origin: `A${r}` });
+
+                // 엑셀 수식(Formulas) 자동 계산 연동: 매입가(I열), 납품가(N열), 판매가(S열)를 수정하면 마진율과 마진액이 자동 계산됨
+                ws[`J${r}`] = { t: 'n', f: `ROUND(I${r}/1.1, 0)`, z: '#,##0' };
+                ws[`K${r}`] = { t: 'n', f: `N${r}-I${r}`, z: '#,##0' };
+                ws[`L${r}`] = { t: 'n', f: `ROUND(K${r}/1.1, 0)`, z: '#,##0' };
+                ws[`M${r}`] = { t: 'n', f: `IF(N${r}>0, (N${r}-I${r})/N${r}, 0)`, z: '0.0%' };
+
+                ws[`O${r}`] = { t: 'n', f: `ROUND(N${r}/1.1, 0)`, z: '#,##0' };
+                ws[`P${r}`] = { t: 'n', f: `S${r}-N${r}`, z: '#,##0' };
+                ws[`Q${r}`] = { t: 'n', f: `ROUND(P${r}/1.1, 0)`, z: '#,##0' };
+                ws[`R${r}`] = { t: 'n', f: `IF(S${r}>0, (S${r}-N${r})/S${r}, 0)`, z: '0.0%' };
+
+                ws[`T${r}`] = { t: 'n', f: `ROUND(S${r}/1.1, 0)`, z: '#,##0' };
+                ws[`U${r}`] = { t: 'n', f: `IF(D${r}>0, ROUND(S${r}/D${r}, 0), S${r})`, z: '#,##0' };
+                ws[`V${r}`] = { t: 'n', f: `ROUND(U${r}/1.1, 0)`, z: '#,##0' };
+
+                ws[`I${r}`].z = '#,##0';
+                ws[`N${r}`].z = '#,##0';
+                ws[`S${r}`].z = '#,##0';
+            });
+
+            ws['!cols'] = [
+                { wch: 13 }, { wch: 12 }, { wch: 28 }, { wch: 8 }, { wch: 11 }, { wch: 8 }, { wch: 18 }, { wch: 16 },
+                { wch: 18 }, { wch: 18 },
+                { wch: 18 }, { wch: 18 }, { wch: 14 },
+                { wch: 18 }, { wch: 18 },
+                { wch: 18 }, { wch: 18 }, { wch: 14 },
+                { wch: 18 }, { wch: 18 },
+                { wch: 18 }, { wch: 18 },
+                { wch: 30 }, { wch: 50 }
+            ];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '잘넷_쿠팡원가마진분석');
+            XLSX.writeFile(wb, `잘넷_쿠팡원가마진분석_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            showToast(`총 ${targetList.length}건의 제품이 자동 계산 수식과 함께 엑셀(.xlsx)로 다운로드되었습니다.`, 'success');
+        }
+
+        function loadAllStorage() {
+            try {
+                const rawCats = localStorage.getItem(STORAGE_KEY_CATEGORIES);
+                categories = rawCats ? normalizeCategoriesArray(JSON.parse(rawCats)) : JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+            } catch (e) { categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)); }
+
+            try {
+                const rawProds = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+                if (rawProds) {
+                    const parsed = JSON.parse(rawProds);
+                    if (Array.isArray(parsed) && parsed.length > 0) { products = parsed; return; }
+                }
+            } catch (e) {}
+            products = JSON.parse(JSON.stringify(DEFAULT_SAMPLE_PRODUCTS));
+            saveProductsToStorage();
+            saveCategoriesToStorage();
+        }
+
+        function saveProductsToStorage() { localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(products)); }
+        function saveCategoriesToStorage() { localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(categories)); }
+
+        function resetSampleData() {
+            openConfirmModal('초기 샘플 데이터 복원', '초기 샘플 데이터로 복원하시겠습니까?', () => {
+                categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+                products = JSON.parse(JSON.stringify(DEFAULT_SAMPLE_PRODUCTS));
+                saveCategoriesToStorage();
+                saveProductsToStorage();
+                populateCategoryDropdowns();
+                resetSimForm();
+                renderProductList();
+                showToast('초기화되었습니다.', 'success');
+            });
+        }
+
+        function exportJSON() {
+            const blob = new Blob([JSON.stringify({ categories, products }, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `backup_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+        }
+
+        function importJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data && Array.isArray(data.products)) {
+                        products = data.products;
+                        if (Array.isArray(data.categories)) categories = normalizeCategoriesArray(data.categories);
+                        saveCategoriesToStorage();
+                        saveProductsToStorage();
+                        populateCategoryDropdowns();
+                        renderProductList();
+                        showToast('불러오기 완료', 'success');
+                    }
+                } catch (err) { showToast('오류 발생', 'error'); }
+            };
+            reader.readAsText(file);
+        }
+
+        function normalizeCategoriesArray(raw) {
+            return raw.map(i => typeof i === 'string' ? { name: i, color: '#64748B' } : i);
+        }
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto px-4 py-3 rounded-xl shadow-lg border-l-4 text-xs sm:text-sm font-bold bg-slate-900 text-white`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 2500);
+        }
+
+        function openConfirmModal(title, message, onConfirm) {
+            const modal = document.getElementById('confirmModal');
+            document.getElementById('confirmModalTitle').textContent = title;
+            document.getElementById('confirmModalMessage').textContent = message;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.getElementById('confirmModalOk').onclick = () => { modal.classList.add('hidden'); modal.classList.remove('flex'); if(onConfirm) onConfirm(); };
+            document.getElementById('confirmModalCancel').onclick = () => { modal.classList.add('hidden'); modal.classList.remove('flex'); };
+        }
+
+        window.onload = function() {
+            loadAllStorage();
+            populateCategoryDropdowns();
+            if (!loadSimDraft()) {
+                resetSimForm(false);
+            }
+            renderProductList();
+        };
+    </script>
+</body>
+</html>
